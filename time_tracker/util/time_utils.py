@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 
 
 def now_local() -> datetime:
@@ -42,6 +43,11 @@ def human_duration(seconds: int) -> str:
     if secs:
         return f"{sign}{hours}:{minutes:02d}:{secs:02d}"
     return f"{sign}{hours}:{minutes:02d}"
+
+
+def decimal_hours(seconds: int | float) -> str:
+    hours = Decimal(str(seconds)) / Decimal("3600")
+    return str(hours.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
 
 
 def round_seconds(seconds: float, increment_minutes: int, mode: str = "nearest") -> int:
