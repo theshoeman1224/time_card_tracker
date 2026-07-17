@@ -85,10 +85,9 @@ def list_sessions_for_work_day(conn: sqlite3.Connection, work_day_id: str) -> li
     return list(
         conn.execute(
             """
-            SELECT s.*, t.name AS work_item_name, o.alias, o.description AS daily_description
+            SELECT s.*, t.name AS work_item_name
             FROM time_sessions s
             JOIN work_item_templates t ON t.id = s.work_item_id
-            LEFT JOIN daily_work_item_overrides o ON o.id = s.daily_override_id
             WHERE s.work_day_id = ?
             ORDER BY s.start_at
             """,
@@ -112,7 +111,6 @@ def update_session(
     start_at: str,
     end_at: str,
     work_item_id: str,
-    alias: str = "",
     note: str = "",
 ) -> None:
     session = conn.execute("SELECT * FROM time_sessions WHERE id = ?", (session_id,)).fetchone()
@@ -132,33 +130,6 @@ def update_session(
     if overlap:
         raise ValueError("Edited session overlaps another session in the same work day.")
 
-    override_id = session["daily_override_id"]
-    if alias.strip():
-        existing = conn.execute(
-            """
-            SELECT id FROM daily_work_item_overrides
-            WHERE work_day_id = ? AND work_item_id = ?
-            """,
-            (session["work_day_id"], work_item_id),
-        ).fetchone()
-        if existing:
-            override_id = existing["id"]
-            conn.execute(
-                "UPDATE daily_work_item_overrides SET alias = ? WHERE id = ?",
-                (alias.strip(), override_id),
-            )
-        else:
-            override_id = repository.new_id()
-            conn.execute(
-                """
-                INSERT INTO daily_work_item_overrides(id, work_day_id, work_item_id, alias)
-                VALUES (?, ?, ?, ?)
-                """,
-                (override_id, session["work_day_id"], work_item_id, alias.strip()),
-            )
-    elif override_id:
-        override_id = None
-
     now_text = iso(now_local())
     snapshot = session["split_snapshot_json"]
     if work_item_id != session["work_item_id"]:
@@ -166,9 +137,9 @@ def update_session(
     conn.execute(
         """
         UPDATE time_sessions
-        SET start_at = ?, end_at = ?, work_item_id = ?, daily_override_id = ?,
-            split_snapshot_json = ?, note = ?, edited_at = ?, updated_at = ?
+        SET start_at = ?, end_at = ?, work_item_id = ?, split_snapshot_json = ?,
+            note = ?, edited_at = ?, updated_at = ?
         WHERE id = ?
         """,
-        (start_at, end_at, work_item_id, override_id, snapshot, note.strip(), now_text, now_text, session_id),
+        (start_at, end_at, work_item_id, snapshot, note.strip(), now_text, now_text, session_id),
     )

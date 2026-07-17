@@ -180,16 +180,12 @@ class SessionDialog(tk.Toplevel):
         self.work_item = ttk.Combobox(self, values=[name for name, _ in self.work_items], state="readonly", width=26)
         self.work_item.grid(row=2, column=1, padx=12, pady=4)
 
-        ttk.Label(self, text="Daily Alias").grid(row=3, column=0, sticky="w", padx=12, pady=4)
-        self.alias = ttk.Entry(self, width=28)
-        self.alias.grid(row=3, column=1, padx=12, pady=4)
-
-        ttk.Label(self, text="Note").grid(row=4, column=0, sticky="w", padx=12, pady=4)
+        ttk.Label(self, text="Note").grid(row=3, column=0, sticky="w", padx=12, pady=4)
         self.note = ttk.Entry(self, width=28)
-        self.note.grid(row=4, column=1, padx=12, pady=4)
+        self.note.grid(row=3, column=1, padx=12, pady=4)
 
         buttons = ttk.Frame(self)
-        buttons.grid(row=5, column=0, columnspan=2, sticky="e", padx=12, pady=12)
+        buttons.grid(row=4, column=0, columnspan=2, sticky="e", padx=12, pady=12)
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right", padx=(6, 0))
         ttk.Button(buttons, text="Save", command=self._save).pack(side="right")
 
@@ -198,7 +194,6 @@ class SessionDialog(tk.Toplevel):
         current_name = session["work_item_name"]
         if current_name in [name for name, _ in self.work_items]:
             self.work_item.set(current_name)
-        self.alias.insert(0, session["alias"] or "")
         self.note.insert(0, session["note"] or "")
         self.wait_window()
 
@@ -217,7 +212,6 @@ class SessionDialog(tk.Toplevel):
             "start_at": start_at,
             "end_at": end_at,
             "work_item_id": work_item_id,
-            "alias": self.alias.get().strip(),
             "note": self.note.get().strip(),
         }
         self.destroy()

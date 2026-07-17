@@ -42,11 +42,10 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
     rows = list(
         conn.execute(
             f"""
-            SELECT s.*, w.work_date, t.name AS template_name, o.alias
+            SELECT s.*, w.work_date, t.name AS template_name
             FROM time_sessions s
             JOIN work_days w ON w.id = s.work_day_id
             JOIN work_item_templates t ON t.id = s.work_item_id
-            LEFT JOIN daily_work_item_overrides o ON o.id = s.daily_override_id
             WHERE w.work_date IN ({placeholders})
             ORDER BY w.work_date, s.start_at
             """,
@@ -57,8 +56,7 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
     nwas: dict[tuple[str, str], float] = defaultdict(float)
     for row in rows:
         seconds = seconds_between(row["start_at"], row["end_at"])
-        display_name = row["alias"] or row["template_name"]
-        work_items[(row["work_item_id"], display_name)] += seconds
+        work_items[(row["work_item_id"], row["template_name"])] += seconds
         for split in json.loads(row["split_snapshot_json"]):
             key = (split["nwa_id"], split["code"])
             nwas[key] += seconds * split["percent_basis_points"] / 10000

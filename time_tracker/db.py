@@ -67,20 +67,10 @@ CREATE TABLE IF NOT EXISTS work_days (
   status TEXT NOT NULL DEFAULT 'open'
 );
 
-CREATE TABLE IF NOT EXISTS daily_work_item_overrides (
-  id TEXT PRIMARY KEY,
-  work_day_id TEXT NOT NULL REFERENCES work_days(id),
-  work_item_id TEXT NOT NULL REFERENCES work_item_templates(id),
-  alias TEXT,
-  description TEXT,
-  UNIQUE (work_day_id, work_item_id)
-);
-
 CREATE TABLE IF NOT EXISTS time_sessions (
   id TEXT PRIMARY KEY,
   work_day_id TEXT NOT NULL REFERENCES work_days(id),
   work_item_id TEXT NOT NULL REFERENCES work_item_templates(id),
-  daily_override_id TEXT REFERENCES daily_work_item_overrides(id),
   start_at TEXT NOT NULL,
   end_at TEXT,
   split_snapshot_json TEXT NOT NULL,

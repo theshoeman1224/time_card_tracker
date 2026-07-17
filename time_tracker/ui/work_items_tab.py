@@ -56,7 +56,7 @@ class WorkItemsTab(ttk.Frame):
 
         self.sessions = ttk.Treeview(
             right,
-            columns=("start", "end", "duration", "work_item", "alias"),
+            columns=("start", "end", "duration", "work_item"),
             show="headings",
             selectmode="browse",
         )
@@ -65,7 +65,6 @@ class WorkItemsTab(ttk.Frame):
             ("end", "End", 140),
             ("duration", "Duration", 90),
             ("work_item", "Work Item", 190),
-            ("alias", "Daily Alias", 160),
         ]:
             self.sessions.heading(column, text=label)
             self.sessions.column(column, width=width)
@@ -118,7 +117,6 @@ class WorkItemsTab(ttk.Frame):
                     format_datetime(row["end_at"]),
                     human_duration(seconds),
                     row["work_item_name"],
-                    row["alias"] or "",
                 ),
             )
             self._session_rows[row["id"]] = row
