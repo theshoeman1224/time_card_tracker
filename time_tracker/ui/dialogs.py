@@ -162,7 +162,7 @@ class SessionDialog(tk.Toplevel):
         super().__init__(parent)
         self.conn = conn
         self.session = session
-        self.result: dict[str, str] | None = None
+        self.result: dict[str, str | None] | None = None
         self.title("Edit Session")
         self.transient(parent)
         self.grab_set()
@@ -200,7 +200,8 @@ class SessionDialog(tk.Toplevel):
     def _save(self) -> None:
         try:
             start_at = iso(parse_local_datetime(self.start.get()))
-            end_at = iso(parse_local_datetime(self.end.get()))
+            end_text = self.end.get().strip()
+            end_at = iso(parse_local_datetime(end_text)) if end_text else None
         except ValueError:
             messagebox.showerror("Session", "Use date/time format YYYY-MM-DD HH:MM.", parent=self)
             return

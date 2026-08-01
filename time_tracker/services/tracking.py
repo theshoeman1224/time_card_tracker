@@ -109,15 +109,18 @@ def update_session(
     conn: sqlite3.Connection,
     session_id: str,
     start_at: str,
-    end_at: str,
+    end_at: str | None,
     work_item_id: str,
     note: str = "",
 ) -> None:
     session = conn.execute("SELECT * FROM time_sessions WHERE id = ?", (session_id,)).fetchone()
     if not session:
         raise ValueError("Session not found.")
-    if parse_iso(end_at) <= parse_iso(start_at):
+    start = parse_iso(start_at)
+    end = parse_iso(end_at) if end_at else None
+    if end and end <= start:
         raise ValueError("End time must be after start time.")
+    overlap_end_at = end_at or iso(now_local())
     overlap = conn.execute(
         """
         SELECT id FROM time_sessions
@@ -125,7 +128,7 @@ def update_session(
           AND start_at < ? AND end_at > ?
         LIMIT 1
         """,
-        (session["work_day_id"], session_id, end_at, start_at),
+        (session["work_day_id"], session_id, overlap_end_at, start_at),
     ).fetchone()
     if overlap:
         raise ValueError("Edited session overlaps another session in the same work day.")

@@ -37,6 +37,23 @@ class TrackingTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(session["work_date"], "2026-07-02")
 
+    def test_update_open_session_start_time_keeps_session_ongoing(self):
+        conn = memory_conn()
+        _, _, work_item = seed_basic(conn)
+        session_id = tracking.start_or_switch(conn, work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
+
+        tracking.update_session(
+            conn,
+            session_id,
+            "2026-07-02T08:45:00-04:00",
+            None,
+            work_item,
+        )
+
+        session = conn.execute("SELECT * FROM time_sessions WHERE id = ?", (session_id,)).fetchone()
+        self.assertEqual(session["start_at"], "2026-07-02T08:45:00-04:00")
+        self.assertIsNone(session["end_at"])
+
 
 if __name__ == "__main__":
     unittest.main()
