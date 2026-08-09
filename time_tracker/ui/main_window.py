@@ -4,6 +4,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk
 
+from time_tracker import constants
 from time_tracker.ui.saved_nwas_tab import SavedNwasTab
 from time_tracker.ui.settings_reports_tab import SettingsReportsTab
 from time_tracker.ui.work_items_tab import WorkItemsTab
@@ -21,8 +22,8 @@ class MainWindow(ttk.Frame):
         self.work_items = WorkItemsTab(self.notebook, conn, self.refresh_all)
         self.reports = SettingsReportsTab(self.notebook, conn, self.refresh_all)
 
-        self.notebook.add(self.saved_nwas, text="Saved NWAs")
-        self.notebook.add(self.work_items, text="Work Items / Current Work")
+        self.notebook.add(self.saved_nwas, text=f"Saved {constants.NWA}s")
+        self.notebook.add(self.work_items, text=f"{constants.WORK_ITEM}s / Current Work")
         self.notebook.add(self.reports, text="Settings / Reports")
 
     def refresh_all(self) -> None:

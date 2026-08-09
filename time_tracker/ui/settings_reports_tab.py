@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from time_tracker import constants
 from time_tracker.paths import database_path, log_path
 from time_tracker.services import exports, reports, repository, tracking
 from time_tracker.util.time_utils import now_local
@@ -46,15 +47,15 @@ class SettingsReportsTab(ttk.Frame):
         self.notebook.pack(fill="both", expand=True)
         self.work_items = ttk.Treeview(self.notebook, columns=("name", "raw", "rounded"), show="headings")
         self.nwas = ttk.Treeview(self.notebook, columns=("code", "raw", "rounded"), show="headings")
-        for tree, first, label in [(self.work_items, "name", "Work Item"), (self.nwas, "code", "NWA")]:
+        for tree, first, label in [(self.work_items, "name", constants.WORK_ITEM), (self.nwas, "code", constants.NWA)]:
             tree.heading(first, text=label)
-            tree.heading("raw", text="Raw")
-            tree.heading("rounded", text="Rounded")
+            tree.heading("raw", text=constants.RAW)
+            tree.heading("rounded", text=constants.ROUNDED)
             tree.column(first, width=360)
             tree.column("raw", width=120, anchor="e")
             tree.column("rounded", width=120, anchor="e")
-        self.notebook.add(self.work_items, text="Raw Time Per Work Item")
-        self.notebook.add(self.nwas, text="Charge Time Per NWA")
+        self.notebook.add(self.work_items, text=f"{constants.RAW} Time Per {constants.WORK_ITEM}")
+        self.notebook.add(self.nwas, text=f"Charge Time Per {constants.NWA}")
         self.refresh()
         self.generate()
 

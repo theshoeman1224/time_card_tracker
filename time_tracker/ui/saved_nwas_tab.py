@@ -4,6 +4,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from time_tracker import constants
 from time_tracker.services import repository
 from time_tracker.ui.dialogs import NwaDialog
 
@@ -25,10 +26,10 @@ class SavedNwasTab(ttk.Frame):
         ttk.Button(toolbar, text="Remove", command=self.remove_nwa).pack(side="right")
 
         self.tree = ttk.Treeview(self, columns=("code", "name", "tags", "notes"), show="headings", selectmode="browse")
-        self.tree.heading("code", text="NWA")
-        self.tree.heading("name", text="Name")
-        self.tree.heading("tags", text="Tags")
-        self.tree.heading("notes", text="Notes")
+        self.tree.heading("code", text=constants.NWA)
+        self.tree.heading("name", text=constants.NAME)
+        self.tree.heading("tags", text=constants.TAGS)
+        self.tree.heading("notes", text=constants.NOTES)
         self.tree.column("code", width=160)
         self.tree.column("name", width=240)
         self.tree.column("tags", width=180)
@@ -58,7 +59,7 @@ class SavedNwasTab(ttk.Frame):
         return selection[0] if selection else None
 
     def add_nwa(self) -> None:
-        dialog = NwaDialog(self, "Add NWA")
+        dialog = NwaDialog(self, f"Add {constants.NWA}")
         if not dialog.result:
             return
         try:
@@ -66,15 +67,15 @@ class SavedNwasTab(ttk.Frame):
             self.conn.commit()
             self.on_change()
         except sqlite3.IntegrityError:
-            messagebox.showerror("NWA", "That NWA code already exists.", parent=self)
+            messagebox.showerror(constants.NWA, f"That {constants.NWA} code already exists.", parent=self)
         except ValueError as exc:
-            messagebox.showerror("NWA", str(exc), parent=self)
+            messagebox.showerror(constants.NWA, str(exc), parent=self)
 
     def edit_nwa(self) -> None:
         row_id = self.selected_id()
         if not row_id:
             return
-        dialog = NwaDialog(self, "Edit NWA", self._rows[row_id])
+        dialog = NwaDialog(self, f"Edit {constants.NWA}", self._rows[row_id])
         if not dialog.result:
             return
         try:
@@ -82,15 +83,15 @@ class SavedNwasTab(ttk.Frame):
             self.conn.commit()
             self.on_change()
         except sqlite3.IntegrityError:
-            messagebox.showerror("NWA", "That NWA code already exists.", parent=self)
+            messagebox.showerror(constants.NWA, f"That {constants.NWA} code already exists.", parent=self)
         except ValueError as exc:
-            messagebox.showerror("NWA", str(exc), parent=self)
+            messagebox.showerror(constants.NWA, str(exc), parent=self)
 
     def remove_nwa(self) -> None:
         row_id = self.selected_id()
         if not row_id:
             return
-        if not messagebox.askyesno("Remove NWA", "Remove this NWA from active lists?", parent=self):
+        if not messagebox.askyesno(f"Remove {constants.NWA}", f"Remove this {constants.NWA} from active lists?", parent=self):
             return
         repository.remove_nwa(self.conn, row_id)
         self.conn.commit()

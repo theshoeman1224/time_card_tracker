@@ -4,6 +4,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from time_tracker import constants
 from time_tracker.services import repository, tracking
 from time_tracker.ui.dialogs import SessionDialog, WorkItemDialog
 from time_tracker.util.time_utils import format_datetime, human_duration, seconds_between
@@ -40,8 +41,8 @@ class WorkItemsTab(ttk.Frame):
         ttk.Button(item_toolbar, text="Remove", command=self.remove_work_item).pack(side="left")
 
         self.items = ttk.Treeview(left, columns=("name", "splits"), show="headings", selectmode="browse")
-        self.items.heading("name", text="Work Item")
-        self.items.heading("splits", text="NWA Splits")
+        self.items.heading("name", text=constants.WORK_ITEM)
+        self.items.heading("splits", text=f"{constants.NWA} Splits")
         self.items.column("name", width=220)
         self.items.column("splits", width=260)
         self.items.pack(fill="both", expand=True)
@@ -64,7 +65,7 @@ class WorkItemsTab(ttk.Frame):
             ("start", "Start", 140),
             ("end", "End", 140),
             ("duration", "Duration", 90),
-            ("work_item", "Work Item", 190),
+            ("work_item", constants.WORK_ITEM, 190),
         ]:
             self.sessions.heading(column, text=label)
             self.sessions.column(column, width=width)
@@ -145,9 +146,9 @@ class WorkItemsTab(ttk.Frame):
 
     def add_work_item(self) -> None:
         if not repository.list_nwas(self.conn):
-            messagebox.showerror("Work Item", "Create at least one NWA before adding work items.", parent=self)
+            messagebox.showerror(constants.WORK_ITEM, f"Create at least one {constants.NWA} before adding work items.", parent=self)
             return
-        dialog = WorkItemDialog(self, self.conn, "Add Work Item")
+        dialog = WorkItemDialog(self, self.conn, f"Add {constants.WORK_ITEM}")
         if not dialog.result:
             return
         try:
@@ -155,13 +156,13 @@ class WorkItemsTab(ttk.Frame):
             self.conn.commit()
             self.on_change()
         except ValueError as exc:
-            messagebox.showerror("Work Item", str(exc), parent=self)
+            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
 
     def edit_work_item(self) -> None:
         row_id = self.selected_work_item_id()
         if not row_id:
             return
-        dialog = WorkItemDialog(self, self.conn, "Edit Work Item", self._work_rows[row_id])
+        dialog = WorkItemDialog(self, self.conn, f"Edit {constants.WORK_ITEM}", self._work_rows[row_id])
         if not dialog.result:
             return
         try:
@@ -169,13 +170,13 @@ class WorkItemsTab(ttk.Frame):
             self.conn.commit()
             self.on_change()
         except ValueError as exc:
-            messagebox.showerror("Work Item", str(exc), parent=self)
+            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
 
     def remove_work_item(self) -> None:
         row_id = self.selected_work_item_id()
         if not row_id:
             return
-        if not messagebox.askyesno("Remove Work Item", "Remove this work item from active lists?", parent=self):
+        if not messagebox.askyesno(f"Remove {constants.WORK_ITEM}", f"Remove this {constants.WORK_ITEM.lower()} from active lists?", parent=self):
             return
         repository.remove_work_item(self.conn, row_id)
         self.conn.commit()
@@ -209,4 +210,4 @@ class WorkItemsTab(ttk.Frame):
             self.conn.commit()
             self.on_change()
         except ValueError as exc:
-            messagebox.showerror("Session", str(exc), parent=self)
+            messagebox.showerror(constants.SESSION, str(exc), parent=self)

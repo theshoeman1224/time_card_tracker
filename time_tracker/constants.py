@@ -1,0 +1,8 @@
+WORK_ITEM = "Work Item"
+NWA = "NWA"
+SESSION = "Session"
+NAME = "Name"
+NOTES = "Notes"
+TAGS = "Tags"
+RAW = "Raw"
+ROUNDED = "Rounded"

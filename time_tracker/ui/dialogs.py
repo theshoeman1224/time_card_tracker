@@ -4,12 +4,10 @@ import sqlite3
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from time_tracker import constants
 from time_tracker.services import repository
 from time_tracker.services.validation import basis_points_to_percent, parse_percent_to_basis_points
 from time_tracker.util.time_utils import format_datetime, iso, parse_local_datetime
-
-
-WORK_ITEM_TITLE = "Work Item"
 
 
 class NwaDialog(tk.Toplevel):
@@ -25,15 +23,15 @@ class NwaDialog(tk.Toplevel):
         self.code = ttk.Entry(self, width=40)
         self.code.grid(row=0, column=1, padx=12, pady=(12, 4))
 
-        ttk.Label(self, text="Name").grid(row=1, column=0, sticky="w", padx=12, pady=4)
+        ttk.Label(self, text=constants.NAME).grid(row=1, column=0, sticky="w", padx=12, pady=4)
         self.name = ttk.Entry(self, width=40)
         self.name.grid(row=1, column=1, padx=12, pady=4)
 
-        ttk.Label(self, text="Notes").grid(row=2, column=0, sticky="nw", padx=12, pady=4)
+        ttk.Label(self, text=constants.NOTES).grid(row=2, column=0, sticky="nw", padx=12, pady=4)
         self.notes = tk.Text(self, width=40, height=5)
         self.notes.grid(row=2, column=1, padx=12, pady=4)
 
-        ttk.Label(self, text="Tags").grid(row=3, column=0, sticky="w", padx=12, pady=4)
+        ttk.Label(self, text=constants.TAGS).grid(row=3, column=0, sticky="w", padx=12, pady=4)
         self.tags = ttk.Entry(self, width=40)
         self.tags.grid(row=3, column=1, padx=12, pady=4)
 
@@ -53,7 +51,7 @@ class NwaDialog(tk.Toplevel):
     def _save(self) -> None:
         code = self.code.get().strip()
         if not code:
-            messagebox.showerror("NWA", "NWA code is required.", parent=self)
+            messagebox.showerror(constants.NWA, f"{constants.NWA} code is required.", parent=self)
             return
         self.result = {
             "code": code,
@@ -74,7 +72,7 @@ class WorkItemDialog(tk.Toplevel):
         self.grab_set()
         self.geometry("680x520")
 
-        ttk.Label(self, text="Name").grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
+        ttk.Label(self, text=constants.NAME).grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
         self.name = ttk.Entry(self, width=54)
         self.name.grid(row=0, column=1, sticky="ew", padx=12, pady=(12, 4))
 
@@ -82,7 +80,7 @@ class WorkItemDialog(tk.Toplevel):
         self.description = tk.Text(self, width=54, height=4)
         self.description.grid(row=1, column=1, sticky="ew", padx=12, pady=4)
 
-        split_frame = ttk.LabelFrame(self, text="NWA Splits")
+        split_frame = ttk.LabelFrame(self, text=f"{constants.NWA} Splits")
         split_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=12, pady=8)
         self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(1, weight=1)
@@ -90,7 +88,7 @@ class WorkItemDialog(tk.Toplevel):
         split_frame.grid_rowconfigure(0, weight=1)
 
         self.splits = ttk.Treeview(split_frame, columns=("nwa", "percent"), show="headings", height=8)
-        self.splits.heading("nwa", text="NWA")
+        self.splits.heading("nwa", text=constants.NWA)
         self.splits.heading("percent", text="Percent")
         self.splits.column("nwa", width=420)
         self.splits.column("percent", width=100, anchor="e")
@@ -123,12 +121,12 @@ class WorkItemDialog(tk.Toplevel):
 
     def _add_split(self) -> None:
         if not self.nwa_combo.get():
-            messagebox.showerror(WORK_ITEM_TITLE, "Choose an NWA.", parent=self)
+            messagebox.showerror(constants.WORK_ITEM, f"Choose an {constants.NWA}.", parent=self)
             return
         try:
             basis_points = parse_percent_to_basis_points(self.percent.get())
         except ValueError as exc:
-            messagebox.showerror(WORK_ITEM_TITLE, str(exc), parent=self)
+            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
             return
         nwa_id = dict(self.nwa_values)[self.nwa_combo.get()]
         for item, existing_id in self._split_ids.items():
@@ -155,7 +153,7 @@ class WorkItemDialog(tk.Toplevel):
                 "splits": splits,
             }
         except ValueError as exc:
-            messagebox.showerror(WORK_ITEM_TITLE, str(exc), parent=self)
+            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
             return
         self.destroy()
 
@@ -178,7 +176,7 @@ class SessionDialog(tk.Toplevel):
         self.end = ttk.Entry(self, width=28)
         self.end.grid(row=1, column=1, padx=12, pady=4)
 
-        ttk.Label(self, text=WORK_ITEM_TITLE).grid(row=2, column=0, sticky="w", padx=12, pady=4)
+        ttk.Label(self, text=constants.WORK_ITEM).grid(row=2, column=0, sticky="w", padx=12, pady=4)
         self.work_items = [(row["name"], row["id"]) for row in repository.list_work_items(conn)]
         self.work_item = ttk.Combobox(self, values=[name for name, _ in self.work_items], state="readonly", width=26)
         self.work_item.grid(row=2, column=1, padx=12, pady=4)
@@ -206,10 +204,10 @@ class SessionDialog(tk.Toplevel):
             end_text = self.end.get().strip()
             end_at = iso(parse_local_datetime(end_text)) if end_text else None
         except ValueError:
-            messagebox.showerror("Session", "Use date/time format YYYY-MM-DD HH:MM.", parent=self)
+            messagebox.showerror(constants.SESSION, "Use date/time format YYYY-MM-DD HH:MM.", parent=self)
             return
         if not self.work_item.get():
-            messagebox.showerror("Session", "Choose a work item.", parent=self)
+            messagebox.showerror(constants.SESSION, f"Choose a {constants.WORK_ITEM.lower()}.", parent=self)
             return
         work_item_id = dict(self.work_items)[self.work_item.get()]
         self.result = {

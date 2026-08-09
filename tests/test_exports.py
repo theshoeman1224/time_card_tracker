@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from time_tracker import constants
 from time_tracker.services import exports
 
 
@@ -18,7 +19,7 @@ class ExportTests(unittest.TestCase):
             md_path = Path(tmp) / "report.md"
             exports.export_csv(report, csv_path)
             exports.export_markdown(report, md_path)
-            self.assertIn("Work Item", csv_path.read_text(encoding="utf-8"))
+            self.assertIn(constants.WORK_ITEM, csv_path.read_text(encoding="utf-8"))
             self.assertIn("| Build |", md_path.read_text(encoding="utf-8"))
 
 
