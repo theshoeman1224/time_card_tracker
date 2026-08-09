@@ -40,6 +40,7 @@ class SettingsReportsTab(ttk.Frame):
         self.anchor.pack(side="left", padx=4)
         self.anchor.insert(0, now_local().date().isoformat())
         ttk.Button(controls, text="Generate", command=self.generate).pack(side="left", padx=8)
+        ttk.Button(controls, text="Copy NWA Values", command=self.copy_nwa_values).pack(side="right", padx=(6, 10))
         ttk.Button(controls, text="Export CSV", command=self.export_csv).pack(side="right", padx=(6, 10))
         ttk.Button(controls, text="Export Markdown", command=self.export_markdown).pack(side="right")
 
@@ -56,6 +57,8 @@ class SettingsReportsTab(ttk.Frame):
             tree.column("rounded", width=120, anchor="e")
         self.notebook.add(self.work_items, text=f"{constants.RAW} Time Per {constants.WORK_ITEM}")
         self.notebook.add(self.nwas, text=f"Charge Time Per {constants.NWA}")
+        self.nwas.bind("<Control-c>", self.copy_nwa_values)
+        self.nwas.bind("<Command-c>", self.copy_nwa_values)
         self.refresh()
         self.generate()
 
@@ -87,6 +90,14 @@ class SettingsReportsTab(ttk.Frame):
             self.work_items.insert("", "end", values=(row["name"], row["raw"], row["rounded"]))
         for row in self.current_report["nwas"]:
             self.nwas.insert("", "end", values=(row["code"], row["raw"], row["rounded"]))
+
+    def copy_nwa_values(self, _event=None):
+        selected = self.nwas.selection() or self.nwas.get_children()
+        values = [str(self.nwas.item(item, "values")[0]) for item in selected]
+        self.clipboard_clear()
+        self.clipboard_append("\n".join(values))
+        self.update()
+        return "break"
 
     def _export_path(self, suffix: str) -> Path | None:
         path = filedialog.asksaveasfilename(
