@@ -9,6 +9,9 @@ from time_tracker.services.validation import basis_points_to_percent, parse_perc
 from time_tracker.util.time_utils import format_datetime, iso, parse_local_datetime
 
 
+WORK_ITEM_TITLE = "Work Item"
+
+
 class NwaDialog(tk.Toplevel):
     def __init__(self, parent: tk.Widget, title: str, initial: sqlite3.Row | None = None):
         super().__init__(parent)
@@ -120,12 +123,12 @@ class WorkItemDialog(tk.Toplevel):
 
     def _add_split(self) -> None:
         if not self.nwa_combo.get():
-            messagebox.showerror("Work Item", "Choose an NWA.", parent=self)
+            messagebox.showerror(WORK_ITEM_TITLE, "Choose an NWA.", parent=self)
             return
         try:
             basis_points = parse_percent_to_basis_points(self.percent.get())
         except ValueError as exc:
-            messagebox.showerror("Work Item", str(exc), parent=self)
+            messagebox.showerror(WORK_ITEM_TITLE, str(exc), parent=self)
             return
         nwa_id = dict(self.nwa_values)[self.nwa_combo.get()]
         for item, existing_id in self._split_ids.items():
@@ -152,7 +155,7 @@ class WorkItemDialog(tk.Toplevel):
                 "splits": splits,
             }
         except ValueError as exc:
-            messagebox.showerror("Work Item", str(exc), parent=self)
+            messagebox.showerror(WORK_ITEM_TITLE, str(exc), parent=self)
             return
         self.destroy()
 
@@ -175,7 +178,7 @@ class SessionDialog(tk.Toplevel):
         self.end = ttk.Entry(self, width=28)
         self.end.grid(row=1, column=1, padx=12, pady=4)
 
-        ttk.Label(self, text="Work Item").grid(row=2, column=0, sticky="w", padx=12, pady=4)
+        ttk.Label(self, text=WORK_ITEM_TITLE).grid(row=2, column=0, sticky="w", padx=12, pady=4)
         self.work_items = [(row["name"], row["id"]) for row in repository.list_work_items(conn)]
         self.work_item = ttk.Combobox(self, values=[name for name, _ in self.work_items], state="readonly", width=26)
         self.work_item.grid(row=2, column=1, padx=12, pady=4)
