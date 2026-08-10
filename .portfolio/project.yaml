@@ -1,0 +1,64 @@
+schema_version: 1
+
+project:
+  name: "Time Card Tracker"
+  slug: "time-card-tracker"
+
+  tagline: "Local desktop time tracking with allocation-based reporting"
+
+  summary: >
+    A local Python desktop application for tracking work sessions and allocating
+    recorded time across NWA charge codes. It combines a Tkinter interface with
+    SQLite persistence and configurable daily, weekly, and monthly reporting.
+
+  description: >
+    Time Card Tracker provides a focused desktop workflow for starting, switching,
+    pausing, and correcting work sessions without relying on a hosted service. Work
+    item templates define percentage-based NWA allocations, while session records
+    preserve an allocation snapshot so later template edits do not rewrite historical
+    reporting data.
+
+    The application separates Tkinter views from repository, tracking, validation,
+    reporting, and export services. It stores data in a per-user SQLite database,
+    validates allocation totals in basis points, prevents overlapping edited sessions,
+    and produces rounded daily, weekly, or monthly summaries with CSV and Markdown
+    export support.
+
+  status: "active"
+
+  role: "Creator and Developer"
+
+  dates:
+    started: "2026-07-02"
+    completed:
+
+  technologies:
+    - "Python 3.11"
+    - "Tkinter"
+    - "SQLite"
+    - "PyInstaller"
+
+  categories:
+    - "Desktop Applications"
+    - "Productivity"
+    - "Data Management"
+
+  highlights:
+    - "Implements start, switch, pause, and editable session workflows with overlap validation"
+    - "Stores percentage allocations as basis points and validates every work item at exactly 100%"
+    - "Snapshots NWA allocation data into each session to preserve historical reporting behavior"
+    - "Generates daily, weekly, and monthly summaries with configurable rounding and decimal-hour output"
+    - "Uses only the Python standard library at runtime, with unittest coverage and optional PyInstaller packaging"
+
+  links:
+    repository: "https://github.com/theshoeman1224/time_card_tracker"
+
+    primary: []
+
+    dashboards:
+      - name: "SonarCloud"
+        type: "quality"
+        url: "https://sonarcloud.io/project/overview?id=theshoeman1224_time_card_tracker"
+
+  demo:
+    type: "none"
