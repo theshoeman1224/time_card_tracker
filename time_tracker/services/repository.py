@@ -154,6 +154,22 @@ def remove_work_item(conn: sqlite3.Connection, work_item_id: str) -> None:
     )
 
 
+def move_work_item(conn: sqlite3.Connection, work_item_id: str, delta: int) -> bool:
+    rows = [row["id"] for row in list_work_items(conn)]
+    index = rows.index(work_item_id)
+    new_index = index + delta
+    if not 0 <= new_index < len(rows):
+        return False
+    rows.insert(new_index, rows.pop(index))
+    now = iso(now_local())
+    for position, row_id in enumerate(rows, start=1):
+        conn.execute(
+            "UPDATE work_item_templates SET sort_order = ?, updated_at = ? WHERE id = ?",
+            (position, now, row_id),
+        )
+    return True
+
+
 def split_snapshot(conn: sqlite3.Connection, work_item_id: str) -> str:
     splits = get_work_item_splits(conn, work_item_id)
     validate_split_total([(row["nwa_id"], row["percent_basis_points"]) for row in splits])
