@@ -39,6 +39,8 @@ class WorkItemsTab(ttk.Frame):
         ttk.Button(item_toolbar, text="Add", command=self.add_work_item).pack(side="left")
         ttk.Button(item_toolbar, text="Edit", command=self.edit_work_item).pack(side="left", padx=6)
         ttk.Button(item_toolbar, text="Remove", command=self.remove_work_item).pack(side="left")
+        ttk.Button(item_toolbar, text="↑", width=2, command=lambda: self.move_work_item(-1)).pack(side="right", padx=(6, 0))
+        ttk.Button(item_toolbar, text="↓", width=2, command=lambda: self.move_work_item(1)).pack(side="right")
 
         self.items = ttk.Treeview(left, columns=("name", "splits"), show="headings", selectmode="browse")
         self.items.heading("name", text=constants.WORK_ITEM)
@@ -179,6 +181,14 @@ class WorkItemsTab(ttk.Frame):
         if not messagebox.askyesno(f"Remove {constants.WORK_ITEM}", f"Remove this {constants.WORK_ITEM.lower()} from active lists?", parent=self):
             return
         repository.remove_work_item(self.conn, row_id)
+        self.conn.commit()
+        self.on_change()
+
+    def move_work_item(self, delta: int) -> None:
+        row_id = self.selected_work_item_id()
+        if not row_id:
+            return
+        repository.move_work_item(self.conn, row_id, delta)
         self.conn.commit()
         self.on_change()
 
