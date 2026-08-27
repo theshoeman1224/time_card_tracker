@@ -1,3 +1,4 @@
+import sqlite3
 import unittest
 
 from tests.helpers import memory_conn, seed_basic
@@ -21,12 +22,11 @@ class MoveWorkItemTests(unittest.TestCase):
 class StatusCheckConstraintTests(unittest.TestCase):
     def test_invalid_status_rejected(self):
         conn = memory_conn()
-        with self.assertRaises(Exception):
+        with self.assertRaises(sqlite3.IntegrityError):
             conn.execute(
                 "INSERT INTO work_days(id, work_date, status) VALUES (?, ?, ?)",
                 ("test-id", "2026-01-01", "invalid_status"),
             )
-            conn.commit()
 
     def test_valid_status_open_accepted(self):
         conn = memory_conn()
