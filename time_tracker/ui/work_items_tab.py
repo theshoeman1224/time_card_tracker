@@ -50,7 +50,14 @@ class WorkItemsTab(ttk.Frame):
         self.items.pack(fill="both", expand=True)
         self.items.bind("<Double-1>", lambda _event: self.start_selected())
         self.items.bind("<Return>", lambda _event: self.start_selected())
-        ttk.Button(left, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x", pady=(8, 0))
+        left_bottom = ttk.Frame(left)
+        left_bottom.pack(side="bottom", fill="x")
+        ttk.Button(left_bottom, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x")
+
+        right_bottom = ttk.Frame(right)
+        right_bottom.pack(side="bottom", fill="x")
+        self.summary = ttk.Label(right_bottom, text="")
+        self.summary.pack(fill="x")
 
         session_toolbar = ttk.Frame(right)
         session_toolbar.pack(fill="x", pady=(0, 8))
@@ -72,9 +79,6 @@ class WorkItemsTab(ttk.Frame):
             self.sessions.heading(column, text=label)
             self.sessions.column(column, width=width)
         self.sessions.pack(fill="both", expand=True)
-
-        self.summary = ttk.Label(right, text="")
-        self.summary.pack(fill="x", pady=(8, 0))
 
         self.refresh()
         self.after(1000, self._tick)
