@@ -35,7 +35,7 @@ The app stores data in SQLite under the current user's app-data directory.
 - Windows: `%APPDATA%\TimeCardTracker\time_card_tracker.sqlite3`
 - Linux: `~/.local/share/time-card-tracker/time_card_tracker.sqlite3`
 
-## Optional Windows Packaging
+## Optional Windows packaging
 
 Packaging is optional and uses a build-time-only dependency on a separate
 Windows machine:

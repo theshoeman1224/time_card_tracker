@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 def parse_percent_to_basis_points(value: str) -> int:
+    """Parse a percent string to basis points (70% = 7000). Raises ValueError on invalid input."""
     text = value.strip().replace("%", "")
     if not text:
         raise ValueError("Percent is required.")
@@ -17,6 +18,7 @@ def parse_percent_to_basis_points(value: str) -> int:
 
 
 def basis_points_to_percent(value: int) -> str:
+    """Convert basis points to a percent string (7000 = '70%')."""
     whole, frac = divmod(int(value), 100)
     if frac:
         return f"{whole}.{frac:02d}%"
@@ -24,6 +26,7 @@ def basis_points_to_percent(value: int) -> str:
 
 
 def validate_split_total(splits: list[tuple[str, int]]) -> None:
+    """Validate that NWA splits sum to exactly 10000 (100%). Raises ValueError otherwise."""
     if not splits:
         raise ValueError("At least one NWA split is required.")
     total = sum(percent for _, percent in splits)

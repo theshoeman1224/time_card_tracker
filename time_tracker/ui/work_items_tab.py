@@ -80,15 +80,15 @@ class WorkItemsTab(ttk.Frame):
         self.after(1000, self._tick)
 
     def refresh(self) -> None:
-        self._refresh_items()
+        active = tracking.current_open_session(self.conn)
+        self._refresh_items(active)
         self._refresh_sessions()
-        self._refresh_status()
+        self._refresh_status(active)
 
-    def _refresh_items(self) -> None:
+    def _refresh_items(self, active: sqlite3.Row | None) -> None:
         selected = self.selected_work_item_id()
         self.items.delete(*self.items.get_children())
         self._work_rows.clear()
-        active = tracking.current_open_session(self.conn)
         for row in repository.list_work_items(self.conn):
             splits = repository.get_work_item_splits(self.conn, row["id"])
             split_text = ", ".join(f"{split['code']} {split['percent_basis_points'] / 100:.0f}%" for split in splits)
@@ -125,8 +125,7 @@ class WorkItemsTab(ttk.Frame):
             self._session_rows[row["id"]] = row
         self.summary.config(text=f"Current day total: {human_duration(total)}")
 
-    def _refresh_status(self) -> None:
-        active = tracking.current_open_session(self.conn)
+    def _refresh_status(self, active: sqlite3.Row | None) -> None:
         if not active:
             self.active_label.config(text="Not tracking")
             self.elapsed_label.config(text="0:00")
@@ -135,7 +134,8 @@ class WorkItemsTab(ttk.Frame):
         self.elapsed_label.config(text=human_duration(seconds_between(active["start_at"], None)))
 
     def _tick(self) -> None:
-        self._refresh_status()
+        active = tracking.current_open_session(self.conn)
+        self._refresh_status(active)
         self.after(1000, self._tick)
 
     def selected_work_item_id(self) -> str | None:
@@ -188,9 +188,12 @@ class WorkItemsTab(ttk.Frame):
         row_id = self.selected_work_item_id()
         if not row_id:
             return
-        repository.move_work_item(self.conn, row_id, delta)
-        self.conn.commit()
-        self.on_change()
+        try:
+            repository.move_work_item(self.conn, row_id, delta)
+            self.conn.commit()
+            self.on_change()
+        except ValueError as exc:
+            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
 
     def start_selected(self) -> None:
         row_id = self.selected_work_item_id()
