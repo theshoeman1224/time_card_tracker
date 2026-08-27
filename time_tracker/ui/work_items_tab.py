@@ -34,6 +34,15 @@ class WorkItemsTab(ttk.Frame):
         content.add(left, weight=2)
         content.add(right, weight=3)
 
+        left_bottom = ttk.Frame(left)
+        left_bottom.pack(side="bottom", fill="x")
+        ttk.Button(left_bottom, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x")
+
+        right_bottom = ttk.Frame(right)
+        right_bottom.pack(side="bottom", fill="x")
+        self.summary = ttk.Label(right_bottom, text="")
+        self.summary.pack(fill="x")
+
         item_toolbar = ttk.Frame(left)
         item_toolbar.pack(fill="x", pady=(0, 8))
         ttk.Button(item_toolbar, text="Add", command=self.add_work_item).pack(side="left")
@@ -50,14 +59,6 @@ class WorkItemsTab(ttk.Frame):
         self.items.pack(fill="both", expand=True)
         self.items.bind("<Double-1>", lambda _event: self.start_selected())
         self.items.bind("<Return>", lambda _event: self.start_selected())
-        left_bottom = ttk.Frame(left)
-        left_bottom.pack(side="bottom", fill="x")
-        ttk.Button(left_bottom, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x")
-
-        right_bottom = ttk.Frame(right)
-        right_bottom.pack(side="bottom", fill="x")
-        self.summary = ttk.Label(right_bottom, text="")
-        self.summary.pack(fill="x")
 
         session_toolbar = ttk.Frame(right)
         session_toolbar.pack(fill="x", pady=(0, 8))
