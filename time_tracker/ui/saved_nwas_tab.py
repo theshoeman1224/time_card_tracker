@@ -10,6 +10,8 @@ from time_tracker.ui.dialogs import NwaDialog
 
 
 class SavedNwasTab(ttk.Frame):
+    """Searchable list of NWAs with add/edit/remove."""
+
     def __init__(self, parent: tk.Widget, conn: sqlite3.Connection, on_change):
         super().__init__(parent, padding=10)
         self.conn = conn

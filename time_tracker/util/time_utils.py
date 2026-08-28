@@ -56,7 +56,10 @@ def human_duration(seconds: int) -> str:
 
 
 def decimal_hours(seconds: int | float) -> str:
-    """Convert seconds to decimal hours with one decimal place (e.g., '1.2')."""
+    """Convert seconds to decimal hours with one decimal place (e.g., '1.2').
+
+    Uses Decimal to avoid float representation errors in the quantize step.
+    """
     hours = Decimal(str(seconds)) / Decimal("3600")
     return str(hours.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
 
@@ -65,6 +68,7 @@ def round_seconds(seconds: float, increment_minutes: int, mode: str = "nearest")
     """Round seconds to the nearest increment. Modes: 'nearest', 'up', 'down'."""
     increment = max(1, int(increment_minutes)) * 60
     if mode == "up":
+        # Ceiling division to the next whole increment.
         return int(((seconds + increment - 1) // increment) * increment)
     if mode == "down":
         return int((seconds // increment) * increment)

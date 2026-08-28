@@ -10,6 +10,7 @@ from time_tracker.util.logging_config import configure_logging
 
 
 def main() -> None:
+    """Configure logging, open the database, and start the main window."""
     configure_logging()
     try:
         conn = db.connect()

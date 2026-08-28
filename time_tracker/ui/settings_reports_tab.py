@@ -13,6 +13,8 @@ from time_tracker.util.time_utils import now_local
 
 
 class SettingsReportsTab(ttk.Frame):
+    """Rounding/reset settings, report generation, and exports."""
+
     def __init__(self, parent: tk.Widget, conn: sqlite3.Connection, on_change):
         super().__init__(parent, padding=10)
         self.conn = conn
@@ -92,6 +94,10 @@ class SettingsReportsTab(ttk.Frame):
             self.nwas.insert("", "end", values=(row["code"], row["raw"], row["rounded"]))
 
     def copy_nwa_values(self, _event=None):
+        """Copy NWA codes to the clipboard: selected rows, or all rows if none selected.
+
+        Returns 'break' so Tk's default Ctrl-C binding doesn't also run.
+        """
         selected = self.nwas.selection() or self.nwas.get_children()
         values = [str(self.nwas.item(item, "values")[0]) for item in selected]
         self.clipboard_clear()

@@ -11,6 +11,8 @@ from time_tracker.util.time_utils import format_datetime, human_duration, second
 
 
 class WorkItemsTab(ttk.Frame):
+    """Work item list and today's sessions, with start/pause controls."""
+
     def __init__(self, parent: tk.Widget, conn: sqlite3.Connection, on_change):
         super().__init__(parent, padding=10)
         self.conn = conn
@@ -94,6 +96,7 @@ class WorkItemsTab(ttk.Frame):
             splits = repository.get_work_item_splits(self.conn, row["id"])
             split_text = ", ".join(f"{split['code']} {split['percent_basis_points'] / 100:.0f}%" for split in splits)
             name = row["name"]
+            # Mark the currently tracked item.
             if active and active["work_item_id"] == row["id"]:
                 name = f"* {name}"
             self.items.insert("", "end", iid=row["id"], values=(name, split_text))
@@ -135,6 +138,7 @@ class WorkItemsTab(ttk.Frame):
         self.elapsed_label.config(text=human_duration(seconds_between(active["start_at"], None)))
 
     def _tick(self) -> None:
+        """Update the elapsed-time label every second while the window is open."""
         active = tracking.current_open_session(self.conn)
         self._refresh_status(active)
         self.after(1000, self._tick)

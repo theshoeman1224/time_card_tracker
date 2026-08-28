@@ -11,6 +11,8 @@ from time_tracker.ui.work_items_tab import WorkItemsTab
 
 
 class MainWindow(ttk.Frame):
+    """Root frame holding the app's three tabs."""
+
     def __init__(self, parent: tk.Tk, conn: sqlite3.Connection):
         super().__init__(parent)
         self.conn = conn
@@ -27,6 +29,7 @@ class MainWindow(ttk.Frame):
         self.notebook.add(self.reports, text="Settings / Reports")
 
     def refresh_all(self) -> None:
+        """Reload data in every tab after a change."""
         self.saved_nwas.refresh()
         self.work_items.refresh()
         self.reports.refresh()

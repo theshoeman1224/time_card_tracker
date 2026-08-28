@@ -29,6 +29,7 @@ class BaseDialog(tk.Toplevel):
         return buttons
 
     def _save(self) -> None:
+        # Only stash a result when validation passes; callers check self.result.
         if self.validate():
             self.result = self.build_result()
             self.destroy()
@@ -41,6 +42,8 @@ class BaseDialog(tk.Toplevel):
 
 
 class NwaDialog(BaseDialog):
+    """Modal form for creating or editing an NWA."""
+
     def __init__(self, parent: tk.Widget, title: str, initial: sqlite3.Row | None = None):
         super().__init__(parent, title, resizable=False)
 
@@ -87,6 +90,8 @@ class NwaDialog(BaseDialog):
 
 
 class WorkItemDialog(BaseDialog):
+    """Modal form for a work item with its NWA percentage splits."""
+
     def __init__(self, parent: tk.Widget, conn: sqlite3.Connection, title: str, initial: sqlite3.Row | None = None):
         super().__init__(parent, title)
         self.conn = conn
@@ -150,6 +155,7 @@ class WorkItemDialog(BaseDialog):
             messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
             return
         nwa_id = self._nwa_id_map[self.nwa_combo.get()]
+        # An NWA can only appear once per work item: update the existing row instead.
         for item, existing_id in self._split_ids.items():
             if existing_id == nwa_id:
                 self.splits.item(item, values=(self.nwa_combo.get().split(" - ")[0], basis_points_to_percent(basis_points)))
@@ -193,6 +199,8 @@ class WorkItemDialog(BaseDialog):
 
 
 class SessionDialog(BaseDialog):
+    """Modal form for editing a session's times, work item, and note."""
+
     def __init__(self, parent: tk.Widget, conn: sqlite3.Connection, session: sqlite3.Row):
         super().__init__(parent, "Edit Session", resizable=False)
         self.conn = conn
@@ -226,6 +234,7 @@ class SessionDialog(BaseDialog):
         self.wait_window()
 
     def validate(self) -> bool:
+        # Parsed timestamps are stashed on self so build_result doesn't re-parse.
         try:
             self._parsed_start = iso(parse_local_datetime(self.start.get()))
             end_text = self.end.get().strip()
