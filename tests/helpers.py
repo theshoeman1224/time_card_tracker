@@ -20,5 +20,4 @@ def seed_basic(conn: sqlite3.Connection) -> tuple[str, str, str]:
     nwa_a = repository.save_nwa(conn, "A", "NWA A")
     nwa_b = repository.save_nwa(conn, "B", "NWA B")
     work_item = repository.save_work_item(conn, "Build", "", [(nwa_a, 7000), (nwa_b, 3000)])
-    conn.commit()
     return nwa_a, nwa_b, work_item

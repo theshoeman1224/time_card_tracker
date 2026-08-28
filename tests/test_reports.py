@@ -13,7 +13,6 @@ class ReportTests(unittest.TestCase):
     def test_report_splits_work_item_time_to_nwas(self):
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
-        self.conn.commit()
 
         report = reports.generate_report(self.conn, "daily", "2026-07-02")
         self.assertEqual(report["work_items"][0]["raw_seconds"], 3600)
@@ -24,7 +23,6 @@ class ReportTests(unittest.TestCase):
     def test_weekly_report_uses_work_dates(self):
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-05T23:00:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-06T01:00:00-04:00"))
-        self.conn.commit()
 
         report = reports.generate_report(self.conn, "weekly", "2026-07-06")
         self.assertEqual(report["dates"], [])
@@ -35,7 +33,6 @@ class ReportTests(unittest.TestCase):
         repository.set_setting(self.conn, "rounding_increment_minutes", "1")
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:12:00-04:00"))
-        self.conn.commit()
 
         report = reports.generate_report(self.conn, "daily", "2026-07-02")
         self.assertEqual(report["work_items"][0]["raw"], "1:12:00")
@@ -46,7 +43,6 @@ class ReportTests(unittest.TestCase):
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-15T09:00:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-15T10:00:00-04:00"))
-        self.conn.commit()
 
         report = reports.generate_report(self.conn, "monthly", "2026-07-15")
         self.assertEqual(len(report["dates"]), 2)

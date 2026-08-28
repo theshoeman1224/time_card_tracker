@@ -160,7 +160,6 @@ class WorkItemsTab(ttk.Frame):
             return
         try:
             repository.save_work_item(self.conn, **dialog.result)
-            self.conn.commit()
             self.on_change()
         except ValueError as exc:
             messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
@@ -174,7 +173,6 @@ class WorkItemsTab(ttk.Frame):
             return
         try:
             repository.save_work_item(self.conn, work_item_id=row_id, **dialog.result)
-            self.conn.commit()
             self.on_change()
         except ValueError as exc:
             messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
@@ -186,7 +184,6 @@ class WorkItemsTab(ttk.Frame):
         if not messagebox.askyesno(f"Remove {constants.WORK_ITEM}", f"Remove this {constants.WORK_ITEM.lower()} from active lists?", parent=self):
             return
         repository.remove_work_item(self.conn, row_id)
-        self.conn.commit()
         self.on_change()
 
     def move_work_item(self, delta: int) -> None:
@@ -195,7 +192,6 @@ class WorkItemsTab(ttk.Frame):
             return
         try:
             repository.move_work_item(self.conn, row_id, delta)
-            self.conn.commit()
             self.on_change()
         except ValueError as exc:
             messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
@@ -206,14 +202,12 @@ class WorkItemsTab(ttk.Frame):
             return
         try:
             tracking.start_or_switch(self.conn, row_id)
-            self.conn.commit()
             self.on_change()
         except ValueError as exc:
             messagebox.showerror("Tracking", str(exc), parent=self)
 
     def pause(self) -> None:
         tracking.pause(self.conn)
-        self.conn.commit()
         self.on_change()
 
     def edit_session(self) -> None:
@@ -225,7 +219,6 @@ class WorkItemsTab(ttk.Frame):
             return
         try:
             tracking.update_session(self.conn, row_id, **dialog.result)
-            self.conn.commit()
             self.on_change()
         except ValueError as exc:
             messagebox.showerror(constants.SESSION, str(exc), parent=self)

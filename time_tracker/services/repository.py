@@ -40,25 +40,26 @@ def save_nwa(
     tags: str | list[str] = "",
     nwa_id: str | None = None,
 ) -> str:
-    """Create or update an NWA. Returns the NWA ID."""
+    """Create or update an NWA. Returns the NWA ID. Commits on success; rolls back and re-raises on failure."""
     now = iso(now_local())
     code = code.strip()
     if not code:
         raise ValueError("NWA code is required.")
-    if nwa_id:
-        conn.execute(
-            "UPDATE nwas SET code = ?, name = ?, notes = ?, is_deleted = 0, updated_at = ? WHERE id = ?",
-            (code, name.strip(), notes.strip(), now, nwa_id),
-        )
-        saved_id = nwa_id
-    else:
-        saved_id = new_id()
-        conn.execute(
-            "INSERT INTO nwas(id, code, name, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (saved_id, code, name.strip(), notes.strip(), now, now),
-        )
-    replace_nwa_tags(conn, saved_id, tags)
-    return saved_id
+    with conn:
+        if nwa_id:
+            conn.execute(
+                "UPDATE nwas SET code = ?, name = ?, notes = ?, is_deleted = 0, updated_at = ? WHERE id = ?",
+                (code, name.strip(), notes.strip(), now, nwa_id),
+            )
+            saved_id = nwa_id
+        else:
+            saved_id = new_id()
+            conn.execute(
+                "INSERT INTO nwas(id, code, name, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (saved_id, code, name.strip(), notes.strip(), now, now),
+            )
+        replace_nwa_tags(conn, saved_id, tags)
+        return saved_id
 
 
 def replace_nwa_tags(conn: sqlite3.Connection, nwa_id: str, tags: str | list[str]) -> None:
@@ -67,28 +68,30 @@ def replace_nwa_tags(conn: sqlite3.Connection, nwa_id: str, tags: str | list[str
         tag_names = [tag.strip() for tag in tags.split(",") if tag.strip()]
     else:
         tag_names = [tag.strip() for tag in tags if tag.strip()]
-    conn.execute("DELETE FROM nwa_tags WHERE nwa_id = ?", (nwa_id,))
-    unique_names = list(dict.fromkeys(tag_names))
-    if not unique_names:
-        return
-    existing = {
-        row["name"]: row["id"]
-        for row in conn.execute("SELECT id, name FROM tags WHERE name IN ({})".format(",".join("?" * len(unique_names))), unique_names)
-    }
-    new_tags = [(new_id(), name) for name in unique_names if name not in existing]
-    if new_tags:
-        conn.executemany("INSERT INTO tags(id, name) VALUES (?, ?)", new_tags)
-        for tag_id, name in new_tags:
-            existing[name] = tag_id
-    conn.executemany(
-        "INSERT INTO nwa_tags(nwa_id, tag_id) VALUES (?, ?)",
-        [(nwa_id, existing[name]) for name in unique_names],
-    )
+    with conn:
+        conn.execute("DELETE FROM nwa_tags WHERE nwa_id = ?", (nwa_id,))
+        unique_names = list(dict.fromkeys(tag_names))
+        if not unique_names:
+            return
+        existing = {
+            row["name"]: row["id"]
+            for row in conn.execute("SELECT id, name FROM tags WHERE name IN ({})".format(",".join("?" * len(unique_names))), unique_names)
+        }
+        new_tags = [(new_id(), name) for name in unique_names if name not in existing]
+        if new_tags:
+            conn.executemany("INSERT INTO tags(id, name) VALUES (?, ?)", new_tags)
+            for tag_id, name in new_tags:
+                existing[name] = tag_id
+        conn.executemany(
+            "INSERT INTO nwa_tags(nwa_id, tag_id) VALUES (?, ?)",
+            [(nwa_id, existing[name]) for name in unique_names],
+        )
 
 
 def remove_nwa(conn: sqlite3.Connection, nwa_id: str) -> None:
     """Soft-delete an NWA by setting is_deleted = 1."""
-    conn.execute("UPDATE nwas SET is_deleted = 1, updated_at = ? WHERE id = ?", (iso(now_local()), nwa_id))
+    with conn:
+        conn.execute("UPDATE nwas SET is_deleted = 1, updated_at = ? WHERE id = ?", (iso(now_local()), nwa_id))
 
 
 def list_work_items(conn: sqlite3.Connection, include_deleted: bool = False) -> list[sqlite3.Row]:
@@ -132,29 +135,30 @@ def create_work_item(
     description: str,
     splits: list[tuple[str, int]],
 ) -> str:
-    """Create a new work item. Returns the work item ID."""
+    """Create a new work item. Returns the work item ID. Commits on success; rolls back and re-raises on failure."""
     validate_split_total(splits)
     now = iso(now_local())
     name = name.strip()
     if not name:
         raise ValueError("Work item name is required.")
-    work_item_id = new_id()
-    sort_order = conn.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM work_item_templates").fetchone()[0]
-    conn.execute(
-        """
-        INSERT INTO work_item_templates(id, name, description, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (work_item_id, name, description.strip(), sort_order, now, now),
-    )
-    conn.executemany(
-        """
-        INSERT INTO work_item_nwa_splits(work_item_id, nwa_id, percent_basis_points)
-        VALUES (?, ?, ?)
-        """,
-        [(work_item_id, nwa_id, percent) for nwa_id, percent in splits],
-    )
-    return work_item_id
+    with conn:
+        work_item_id = new_id()
+        sort_order = conn.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM work_item_templates").fetchone()[0]
+        conn.execute(
+            """
+            INSERT INTO work_item_templates(id, name, description, sort_order, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (work_item_id, name, description.strip(), sort_order, now, now),
+        )
+        conn.executemany(
+            """
+            INSERT INTO work_item_nwa_splits(work_item_id, nwa_id, percent_basis_points)
+            VALUES (?, ?, ?)
+            """,
+            [(work_item_id, nwa_id, percent) for nwa_id, percent in splits],
+        )
+        return work_item_id
 
 
 def update_work_item(
@@ -164,25 +168,26 @@ def update_work_item(
     description: str,
     splits: list[tuple[str, int]],
 ) -> str:
-    """Update an existing work item. Returns the work item ID."""
+    """Update an existing work item. Returns the work item ID. Commits on success; rolls back and re-raises on failure."""
     validate_split_total(splits)
     now = iso(now_local())
     name = name.strip()
     if not name:
         raise ValueError("Work item name is required.")
-    conn.execute(
-        "UPDATE work_item_templates SET name = ?, description = ?, is_deleted = 0, updated_at = ? WHERE id = ?",
-        (name, description.strip(), now, work_item_id),
-    )
-    conn.execute("DELETE FROM work_item_nwa_splits WHERE work_item_id = ?", (work_item_id,))
-    conn.executemany(
-        """
-        INSERT INTO work_item_nwa_splits(work_item_id, nwa_id, percent_basis_points)
-        VALUES (?, ?, ?)
-        """,
-        [(work_item_id, nwa_id, percent) for nwa_id, percent in splits],
-    )
-    return work_item_id
+    with conn:
+        conn.execute(
+            "UPDATE work_item_templates SET name = ?, description = ?, is_deleted = 0, updated_at = ? WHERE id = ?",
+            (name, description.strip(), now, work_item_id),
+        )
+        conn.execute("DELETE FROM work_item_nwa_splits WHERE work_item_id = ?", (work_item_id,))
+        conn.executemany(
+            """
+            INSERT INTO work_item_nwa_splits(work_item_id, nwa_id, percent_basis_points)
+            VALUES (?, ?, ?)
+            """,
+            [(work_item_id, nwa_id, percent) for nwa_id, percent in splits],
+        )
+        return work_item_id
 
 
 def save_work_item(
@@ -192,7 +197,10 @@ def save_work_item(
     splits: list[tuple[str, int]],
     work_item_id: str | None = None,
 ) -> str:
-    """Create or update a work item. Returns the work item ID."""
+    """Create or update a work item. Returns the work item ID.
+
+    A dispatcher over create_work_item/update_work_item, which own durability.
+    """
     if work_item_id:
         return update_work_item(conn, work_item_id, name, description, splits)
     return create_work_item(conn, name, description, splits)
@@ -200,27 +208,33 @@ def save_work_item(
 
 def remove_work_item(conn: sqlite3.Connection, work_item_id: str) -> None:
     """Soft-delete a work item by setting is_deleted = 1."""
-    conn.execute(
-        "UPDATE work_item_templates SET is_deleted = 1, updated_at = ? WHERE id = ?",
-        (iso(now_local()), work_item_id),
-    )
-
-
-def move_work_item(conn: sqlite3.Connection, work_item_id: str, delta: int) -> bool:
-    """Move a work item up (-1) or down (+1) in sort order. Returns False if at boundary."""
-    rows = [row["id"] for row in list_work_items(conn)]
-    index = rows.index(work_item_id)
-    new_index = index + delta
-    if not 0 <= new_index < len(rows):
-        return False
-    rows.insert(new_index, rows.pop(index))
-    now = iso(now_local())
-    for position, row_id in enumerate(rows, start=1):
+    with conn:
         conn.execute(
-            "UPDATE work_item_templates SET sort_order = ?, updated_at = ? WHERE id = ?",
-            (position, now, row_id),
+            "UPDATE work_item_templates SET is_deleted = 1, updated_at = ? WHERE id = ?",
+            (iso(now_local()), work_item_id),
         )
-    return True
+
+
+def move_work_item(conn: sqlite3.Connection, work_item_id: str, delta: int) -> None:
+    """Move a work item up (-1) or down (+1) in sort order.
+
+    Raises ValueError if the work item is unknown or already at the boundary.
+    Commits on success; rolls back and re-raises on failure.
+    """
+    with conn:
+        rows = [row["id"] for row in list_work_items(conn)]
+        index = rows.index(work_item_id)
+        new_index = index + delta
+        if not 0 <= new_index < len(rows):
+            edge = "top" if delta < 0 else "bottom"
+            raise ValueError(f"Work item is already at the {edge} of the list.")
+        rows.insert(new_index, rows.pop(index))
+        now = iso(now_local())
+        for position, row_id in enumerate(rows, start=1):
+            conn.execute(
+                "UPDATE work_item_templates SET sort_order = ?, updated_at = ? WHERE id = ?",
+                (position, now, row_id),
+            )
 
 
 def split_snapshot(conn: sqlite3.Connection, work_item_id: str) -> str:
@@ -249,7 +263,8 @@ def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
 
 def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
     """Insert or update a setting value."""
-    conn.execute(
-        "INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        (key, value),
-    )
+    with conn:
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )

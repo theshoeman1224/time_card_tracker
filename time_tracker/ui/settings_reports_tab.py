@@ -69,14 +69,12 @@ class SettingsReportsTab(ttk.Frame):
 
     def save_settings(self) -> None:
         repository.set_setting(self.conn, "rounding_increment_minutes", self.rounding.get() or "15")
-        self.conn.commit()
         self.generate()
 
     def reset_day(self) -> None:
         if not messagebox.askyesno("Reset Day", "Stop current tracking and reset the current day?", parent=self):
             return
         tracking.reset_day(self.conn)
-        self.conn.commit()
         self.on_change()
 
     def generate(self) -> None:
