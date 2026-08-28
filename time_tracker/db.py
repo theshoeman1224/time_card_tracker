@@ -7,6 +7,7 @@ from time_tracker.paths import database_path
 from time_tracker.util.time_utils import iso, now_local
 
 
+# Bump when the schema changes; the applied version is recorded in schema_migrations.
 SCHEMA_VERSION = 1
 
 
@@ -100,6 +101,7 @@ DEFAULT_SETTINGS = {
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
+    """Open the database with row access and foreign keys enforced, then run migrations."""
     conn = sqlite3.connect(path or database_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -108,6 +110,7 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
+    """Create tables if missing, record the schema version, and seed default settings."""
     conn.executescript(SCHEMA_SQL)
     applied = conn.execute("SELECT 1 FROM schema_migrations WHERE version = ?", (SCHEMA_VERSION,)).fetchone()
     if not applied:

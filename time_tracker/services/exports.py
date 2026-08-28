@@ -6,6 +6,7 @@ from pathlib import Path
 from time_tracker import constants
 
 def export_csv(report: dict[str, object], path: Path) -> None:
+    """Write a report as CSV with a Section column separating work items from NWAs."""
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["Section", "Name/Code", constants.RAW, constants.ROUNDED])
@@ -16,6 +17,7 @@ def export_csv(report: dict[str, object], path: Path) -> None:
 
 
 def export_markdown(report: dict[str, object], path: Path) -> None:
+    """Write a report as Markdown with one table per section."""
     lines = [
         f"# Time Report: {report['period'].title()} {report['anchor_date']}",
         "",

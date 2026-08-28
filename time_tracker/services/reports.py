@@ -10,6 +10,7 @@ from time_tracker.util.time_utils import decimal_hours, human_duration, round_se
 
 
 def report_dates(conn: sqlite3.Connection, period: str, anchor_date: str) -> list[str]:
+    """Return the work dates covered by a period ('daily', 'weekly', 'monthly') anchored on the given date."""
     if period == "daily":
         return [anchor_date]
     anchor = datetime.strptime(anchor_date, "%Y-%m-%d")
@@ -35,6 +36,11 @@ def report_dates(conn: sqlite3.Connection, period: str, anchor_date: str) -> lis
 
 
 def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> dict[str, object]:
+    """Aggregate tracked time per work item and per NWA, rounded per stored settings.
+
+    NWA time comes from each session's split snapshot, so later edits to a work
+    item's splits don't change how past sessions are charged.
+    """
     dates = report_dates(conn, period, anchor_date)
     if not dates:
         return {"period": period, "anchor_date": anchor_date, "dates": [], "work_items": [], "nwas": []}
@@ -57,6 +63,7 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
     for row in rows:
         seconds = seconds_between(row["start_at"], row["end_at"])
         work_items[(row["work_item_id"], row["template_name"])] += seconds
+        # Prorate session time to each NWA using the split frozen at session start.
         for split in json.loads(row["split_snapshot_json"]):
             key = (split["nwa_id"], split["code"])
             nwas[key] += seconds * split["percent_basis_points"] / 10000

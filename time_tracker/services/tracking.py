@@ -119,6 +119,10 @@ def _validate_session_update(
     start_at: str,
     end_at: str | None,
 ) -> sqlite3.Row:
+    """Check the session exists and its new times don't overlap other sessions in the same work day.
+
+    Open-ended sessions are compared as if they end now. Returns the session row.
+    """
     session = conn.execute("SELECT * FROM time_sessions WHERE id = ?", (session_id,)).fetchone()
     if not session:
         raise ValueError("Session not found.")
@@ -149,7 +153,11 @@ def update_session(
     work_item_id: str,
     note: str = "",
 ) -> None:
-    """Update a session's times, work item, and note. Validates no overlaps."""
+    """Update a session's times, work item, and note. Validates no overlaps.
+
+    Re-snapshots the splits if the work item changed, so the session is charged
+    by the item's current splits.
+    """
     session = _validate_session_update(conn, session_id, start_at, end_at)
     now_text = iso(now_local())
     snapshot = session["split_snapshot_json"]
