@@ -12,7 +12,7 @@ project:
     SQLite persistence and configurable daily, weekly, and monthly reporting.
 
   description: >
-    Time Card Tracker provides a focused desktop workflow for starting, switching,
+    Time Card Tracker provides a desktop workflow for starting, switching,
     pausing, and correcting work sessions without relying on a hosted service. Work
     item templates define percentage-based NWA allocations, while session records
     preserve an allocation snapshot so later template edits do not rewrite historical

@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS work_days (
   work_date TEXT NOT NULL UNIQUE,
   started_at TEXT,
   reset_at TEXT,
-  status TEXT NOT NULL DEFAULT 'open'
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'reset'))
 );
 
 CREATE TABLE IF NOT EXISTS time_sessions (

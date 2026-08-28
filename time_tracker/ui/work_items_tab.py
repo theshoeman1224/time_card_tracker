@@ -26,6 +26,10 @@ class WorkItemsTab(ttk.Frame):
         self.elapsed_label.pack(side="left", padx=16)
         ttk.Button(status, text="Pause / Stop", command=self.pause).pack(side="right")
 
+        bottom_bar = ttk.Frame(self)
+        bottom_bar.pack(side="bottom", fill="x", pady=(8, 0))
+        ttk.Button(bottom_bar, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x")
+
         content = ttk.PanedWindow(self, orient="horizontal")
         content.pack(fill="both", expand=True)
 
@@ -50,12 +54,12 @@ class WorkItemsTab(ttk.Frame):
         self.items.pack(fill="both", expand=True)
         self.items.bind("<Double-1>", lambda _event: self.start_selected())
         self.items.bind("<Return>", lambda _event: self.start_selected())
-        ttk.Button(left, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x", pady=(8, 0))
 
         session_toolbar = ttk.Frame(right)
         session_toolbar.pack(fill="x", pady=(0, 8))
-        ttk.Label(session_toolbar, text="Current Day Sessions").pack(side="left")
         ttk.Button(session_toolbar, text="Edit Session", command=self.edit_session).pack(side="right")
+        self.summary = ttk.Label(session_toolbar, text="")
+        self.summary.pack(side="right", padx=(0, 8))
 
         self.sessions = ttk.Treeview(
             right,
@@ -73,22 +77,19 @@ class WorkItemsTab(ttk.Frame):
             self.sessions.column(column, width=width)
         self.sessions.pack(fill="both", expand=True)
 
-        self.summary = ttk.Label(right, text="")
-        self.summary.pack(fill="x", pady=(8, 0))
-
         self.refresh()
         self.after(1000, self._tick)
 
     def refresh(self) -> None:
-        self._refresh_items()
+        active = tracking.current_open_session(self.conn)
+        self._refresh_items(active)
         self._refresh_sessions()
-        self._refresh_status()
+        self._refresh_status(active)
 
-    def _refresh_items(self) -> None:
+    def _refresh_items(self, active: sqlite3.Row | None) -> None:
         selected = self.selected_work_item_id()
         self.items.delete(*self.items.get_children())
         self._work_rows.clear()
-        active = tracking.current_open_session(self.conn)
         for row in repository.list_work_items(self.conn):
             splits = repository.get_work_item_splits(self.conn, row["id"])
             split_text = ", ".join(f"{split['code']} {split['percent_basis_points'] / 100:.0f}%" for split in splits)
@@ -123,10 +124,9 @@ class WorkItemsTab(ttk.Frame):
                 ),
             )
             self._session_rows[row["id"]] = row
-        self.summary.config(text=f"Current day total: {human_duration(total)}")
+        self.summary.config(text=f"Total: {human_duration(total)}")
 
-    def _refresh_status(self) -> None:
-        active = tracking.current_open_session(self.conn)
+    def _refresh_status(self, active: sqlite3.Row | None) -> None:
         if not active:
             self.active_label.config(text="Not tracking")
             self.elapsed_label.config(text="0:00")
@@ -135,7 +135,8 @@ class WorkItemsTab(ttk.Frame):
         self.elapsed_label.config(text=human_duration(seconds_between(active["start_at"], None)))
 
     def _tick(self) -> None:
-        self._refresh_status()
+        active = tracking.current_open_session(self.conn)
+        self._refresh_status(active)
         self.after(1000, self._tick)
 
     def selected_work_item_id(self) -> str | None:
@@ -188,9 +189,12 @@ class WorkItemsTab(ttk.Frame):
         row_id = self.selected_work_item_id()
         if not row_id:
             return
-        repository.move_work_item(self.conn, row_id, delta)
-        self.conn.commit()
-        self.on_change()
+        try:
+            repository.move_work_item(self.conn, row_id, delta)
+            self.conn.commit()
+            self.on_change()
+        except ValueError as exc:
+            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
 
     def start_selected(self) -> None:
         row_id = self.selected_work_item_id()

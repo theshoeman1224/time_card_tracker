@@ -8,6 +8,7 @@ from time_tracker.util.time_utils import iso, now_local, parse_iso
 
 
 def get_or_create_work_day(conn: sqlite3.Connection, current: datetime | None = None) -> str:
+    """Get or create a work day for the given date. Returns the work day ID."""
     current = current or now_local()
     work_date = current.date().isoformat()
     row = conn.execute("SELECT id FROM work_days WHERE work_date = ?", (work_date,)).fetchone()
@@ -22,6 +23,7 @@ def get_or_create_work_day(conn: sqlite3.Connection, current: datetime | None = 
 
 
 def current_open_session(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    """Get the currently open session, or None if nothing is tracking."""
     return conn.execute(
         """
         SELECT s.*, w.work_date, t.name AS work_item_name
@@ -36,6 +38,7 @@ def current_open_session(conn: sqlite3.Connection) -> sqlite3.Row | None:
 
 
 def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: datetime | None = None) -> str:
+    """Start tracking a work item, or switch if already tracking something else. Returns session ID."""
     current = current or now_local()
     now_text = iso(current)
     active = current_open_session(conn)
@@ -64,6 +67,7 @@ def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: dateti
 
 
 def pause(conn: sqlite3.Connection, current: datetime | None = None) -> None:
+    """Close the currently open session. No-op if no session is open."""
     active = current_open_session(conn)
     if not active:
         return
@@ -72,6 +76,7 @@ def pause(conn: sqlite3.Connection, current: datetime | None = None) -> None:
 
 
 def reset_day(conn: sqlite3.Connection, current: datetime | None = None) -> None:
+    """Pause any open session and mark the current day as reset."""
     current = current or now_local()
     pause(conn, current)
     work_day_id = get_or_create_work_day(conn, current)
@@ -82,6 +87,7 @@ def reset_day(conn: sqlite3.Connection, current: datetime | None = None) -> None
 
 
 def list_sessions_for_work_day(conn: sqlite3.Connection, work_day_id: str) -> list[sqlite3.Row]:
+    """List all sessions for a work day, ordered by start time."""
     return list(
         conn.execute(
             """
@@ -97,22 +103,22 @@ def list_sessions_for_work_day(conn: sqlite3.Connection, work_day_id: str) -> li
 
 
 def work_day_for_date(conn: sqlite3.Connection, work_date: str) -> sqlite3.Row | None:
+    """Get a work day by date string (YYYY-MM-DD), or None if not found."""
     return conn.execute("SELECT * FROM work_days WHERE work_date = ?", (work_date,)).fetchone()
 
 
 def today_work_day(conn: sqlite3.Connection, current: datetime | None = None) -> sqlite3.Row | None:
+    """Get today's work day, or None if none exists."""
     current = current or now_local()
     return work_day_for_date(conn, current.date().isoformat())
 
 
-def update_session(
+def _validate_session_update(
     conn: sqlite3.Connection,
     session_id: str,
     start_at: str,
     end_at: str | None,
-    work_item_id: str,
-    note: str = "",
-) -> None:
+) -> sqlite3.Row:
     session = conn.execute("SELECT * FROM time_sessions WHERE id = ?", (session_id,)).fetchone()
     if not session:
         raise ValueError("Session not found.")
@@ -132,7 +138,19 @@ def update_session(
     ).fetchone()
     if overlap:
         raise ValueError("Edited session overlaps another session in the same work day.")
+    return session
 
+
+def update_session(
+    conn: sqlite3.Connection,
+    session_id: str,
+    start_at: str,
+    end_at: str | None,
+    work_item_id: str,
+    note: str = "",
+) -> None:
+    """Update a session's times, work item, and note. Validates no overlaps."""
+    session = _validate_session_update(conn, session_id, start_at, end_at)
     now_text = iso(now_local())
     snapshot = session["split_snapshot_json"]
     if work_item_id != session["work_item_id"]:

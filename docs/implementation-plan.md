@@ -1,4 +1,4 @@
-# Time Card Tracker Implementation Plan
+# Time card tracker implementation plan
 
 Runtime implementation uses Python 3.11 standard library modules only:
 `tkinter`, `sqlite3`, `csv`, `pathlib`, `datetime`, `zoneinfo`, `logging`, and `unittest`.
