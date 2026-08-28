@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -74,7 +75,28 @@ def round_seconds(seconds: float, increment_minutes: int, mode: str = "nearest")
         return int(((seconds + increment - 1) // increment) * increment)
     if mode == "down":
         return int((seconds // increment) * increment)
-    return int(round(seconds / increment) * increment)
+    # Round half up, consistent with decimal_hours (Python's round() is half-to-even).
+    return int(math.floor(seconds / increment + 0.5) * increment)
+
+
+def apportion_rounded(rounded_total_seconds: int, raw_parts: list[float], increment_minutes: int) -> list[int]:
+    """Split a rounded total across parts in whole increments (largest remainder).
+
+    Floors each part to the increment, then hands leftover increments to the
+    parts with the biggest fractional remainder, so the results sum to
+    rounded_total_seconds exactly. Ties break by part order, so callers should
+    pass parts in a deterministic order.
+    """
+    increment = max(1, int(increment_minutes)) * 60
+    counts = [int(part // increment) for part in raw_parts]
+    remaining = max(0, int(rounded_total_seconds) // increment - sum(counts))
+    order = sorted(
+        range(len(raw_parts)),
+        key=lambda i: (-(raw_parts[i] - counts[i] * increment), i),
+    )
+    for i in order[:remaining]:
+        counts[i] += 1
+    return [count * increment for count in counts]
 
 
 def week_bounds(day: datetime) -> tuple[str, str]:

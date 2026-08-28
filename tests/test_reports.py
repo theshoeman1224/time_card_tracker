@@ -59,6 +59,39 @@ class ReportTests(unittest.TestCase):
             reports.generate_report(self.conn, "yearly", "2026-07-02")
         self.assertIn("Unknown", str(ctx.exception))
 
+    def test_nwa_rounded_times_sum_to_work_item_rounded_times(self):
+        # Regression: independent per-NWA rounding lost fractional remainders
+        # (raw 0.3 + 0.1 of work-item time reported as 0.3 of NWA charge time).
+        repository.set_setting(self.conn, "rounding_increment_minutes", "6")
+        item_two = repository.save_work_item(self.conn, "Support", "", [(self.nwa_a, 10000)])
+
+        tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
+        tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T09:16:03-04:00"))
+        tracking.start_or_switch(self.conn, item_two, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
+        tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:04:03-04:00"))
+
+        report = reports.generate_report(self.conn, "daily", "2026-07-02")
+        items = {row["name"]: row for row in report["work_items"]}
+        self.assertEqual(items["Build"]["raw_seconds"], 963)
+        self.assertEqual(items["Build"]["rounded_seconds"], 1080)
+        self.assertEqual(items["Support"]["rounded_seconds"], 360)
+        by_code = {row["code"]: row for row in report["nwas"]}
+        self.assertEqual(by_code["A"]["rounded_seconds"], 1080)
+        self.assertEqual(by_code["B"]["rounded_seconds"], 360)
+        item_total = sum(row["rounded_seconds"] for row in report["work_items"])
+        nwa_total = sum(row["rounded_seconds"] for row in report["nwas"])
+        self.assertEqual(nwa_total, item_total)
+
+    def test_item_rounded_to_zero_charges_nothing_to_nwas(self):
+        repository.set_setting(self.conn, "rounding_increment_minutes", "15")
+        tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
+        tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T09:05:00-04:00"))
+
+        report = reports.generate_report(self.conn, "daily", "2026-07-02")
+        self.assertEqual(report["work_items"][0]["rounded_seconds"], 0)
+        for row in report["nwas"]:
+            self.assertEqual(row["rounded_seconds"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

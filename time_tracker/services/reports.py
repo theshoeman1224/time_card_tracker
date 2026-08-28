@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from time_tracker.services import repository, tracking
-from time_tracker.util.time_utils import decimal_hours, human_duration, round_seconds, week_bounds
+from time_tracker.util.time_utils import apportion_rounded, decimal_hours, human_duration, round_seconds, week_bounds
 
 
 def report_dates(conn: sqlite3.Connection, period: str, anchor_date: str) -> list[str]:
@@ -59,14 +59,16 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
         )
     )
     work_items: dict[tuple[str, str], int] = defaultdict(int)
-    nwas: dict[tuple[str, str], float] = defaultdict(float)
+    item_nwa_parts: dict[tuple[str, str], dict[tuple[str, str], float]] = defaultdict(lambda: defaultdict(float))
     for row in rows:
         seconds = tracking.session_seconds(row)
-        work_items[(row["work_item_id"], row["template_name"])] += seconds
+        item_key = (row["work_item_id"], row["template_name"])
+        work_items[item_key] += seconds
         # Prorate session time to each NWA using the split frozen at session start.
         for split in json.loads(row["split_snapshot_json"]):
-            key = (split["nwa_id"], split["code"])
-            nwas[key] += seconds * split["percent_basis_points"] / 10000
+            item_nwa_parts[item_key][(split["nwa_id"], split["code"])] += (
+                seconds * split["percent_basis_points"] / 10000
+            )
 
     increment = int(repository.get_setting(conn, "rounding_increment_minutes", "15"))
     mode = repository.get_setting(conn, "rounding_mode", "nearest")
@@ -84,9 +86,24 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
             }
         )
 
+    # Charge each work item's rounded total across its NWAs (largest remainder),
+    # so NWA rounded times always sum to the work item rounded times instead of
+    # each NWA row rounding independently and losing fractional remainders.
+    nwa_raw: dict[tuple[str, str], float] = defaultdict(float)
+    nwa_rounded: dict[tuple[str, str], int] = defaultdict(int)
+    for item_row in work_item_rows:
+        parts = item_nwa_parts[(item_row["id"], item_row["name"])]
+        ordered = sorted(parts)
+        apportioned = apportion_rounded(
+            item_row["rounded_seconds"], [parts[key] for key in ordered], increment
+        )
+        for key, seconds in zip(ordered, apportioned):
+            nwa_rounded[key] += seconds
+            nwa_raw[key] += parts[key]
+
     nwa_rows = []
-    for (nwa_id, code), seconds in sorted(nwas.items(), key=lambda item: item[0][1]):
-        rounded_seconds = round_seconds(seconds, increment, mode)
+    for (nwa_id, code), seconds in sorted(nwa_raw.items(), key=lambda item: item[0][1]):
+        rounded_seconds = nwa_rounded[(nwa_id, code)]
         nwa_rows.append(
             {
                 "id": nwa_id,
