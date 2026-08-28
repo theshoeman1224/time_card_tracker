@@ -12,7 +12,6 @@ class TrackingTests(unittest.TestCase):
 
     def test_start_creates_session(self):
         session_id = tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
-        self.conn.commit()
 
         active = tracking.current_open_session(self.conn)
         self.assertIsNotNone(active)
@@ -22,11 +21,9 @@ class TrackingTests(unittest.TestCase):
     def test_switch_closes_previous_and_opens_new(self):
         other_nwa = repository.save_nwa(self.conn, "C", "NWA C")
         second = repository.save_work_item(self.conn, "Review", "", [(other_nwa, 10000)])
-        self.conn.commit()
 
         first = tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
         second_id = tracking.start_or_switch(self.conn, second, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
-        self.conn.commit()
 
         active = tracking.current_open_session(self.conn)
         self.assertEqual(active["work_item_id"], second)
@@ -38,7 +35,6 @@ class TrackingTests(unittest.TestCase):
     def test_pause_closes_active_session(self):
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:30:00-04:00"))
-        self.conn.commit()
 
         self.assertIsNone(tracking.current_open_session(self.conn))
         sessions = list(self.conn.execute("SELECT * FROM time_sessions ORDER BY start_at"))
@@ -52,7 +48,6 @@ class TrackingTests(unittest.TestCase):
     def test_start_or_switch_same_item_returns_existing(self):
         session_id = tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
         same_id = tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:05:00-04:00"))
-        self.conn.commit()
 
         self.assertEqual(session_id, same_id)
         sessions = list(self.conn.execute("SELECT * FROM time_sessions"))
@@ -61,7 +56,6 @@ class TrackingTests(unittest.TestCase):
     def test_midnight_stays_on_original_work_day(self):
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T23:55:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-03T00:10:00-04:00"))
-        self.conn.commit()
 
         session = self.conn.execute(
             """
@@ -73,10 +67,8 @@ class TrackingTests(unittest.TestCase):
 
     def test_update_open_session_start_time(self):
         session_id = tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
-        self.conn.commit()
 
         tracking.update_session(self.conn, session_id, "2026-07-02T08:45:00-04:00", None, self.work_item)
-        self.conn.commit()
 
         session = self.conn.execute("SELECT * FROM time_sessions WHERE id = ?", (session_id,)).fetchone()
         self.assertEqual(session["start_at"], "2026-07-02T08:45:00-04:00")
@@ -89,7 +81,6 @@ class TrackingTests(unittest.TestCase):
 
     def test_update_session_end_before_start_raises(self):
         session_id = tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
-        self.conn.commit()
 
         with self.assertRaises(ValueError) as ctx:
             tracking.update_session(self.conn, session_id, "2026-07-02T10:00:00-04:00", "2026-07-02T09:00:00-04:00", self.work_item)
@@ -99,7 +90,6 @@ class TrackingTests(unittest.TestCase):
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
         session2 = tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T10:30:00-04:00"))
-        self.conn.commit()
 
         with self.assertRaises(ValueError) as ctx:
             tracking.update_session(self.conn, session2, "2026-07-02T09:00:00-04:00", "2026-07-02T10:30:00-04:00", self.work_item)
@@ -108,10 +98,8 @@ class TrackingTests(unittest.TestCase):
     def test_reset_day_clears_sessions(self):
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
-        self.conn.commit()
 
         tracking.reset_day(self.conn, datetime.fromisoformat("2026-07-02T10:30:00-04:00"))
-        self.conn.commit()
 
         day = tracking.today_work_day(self.conn, datetime.fromisoformat("2026-07-02T11:00:00-04:00"))
         self.assertIsNotNone(day)

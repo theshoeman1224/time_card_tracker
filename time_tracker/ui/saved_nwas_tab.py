@@ -66,7 +66,6 @@ class SavedNwasTab(ttk.Frame):
             return
         try:
             repository.save_nwa(self.conn, **dialog.result)
-            self.conn.commit()
             self.on_change()
         except sqlite3.IntegrityError:
             messagebox.showerror(constants.NWA, f"That {constants.NWA} code already exists.", parent=self)
@@ -82,7 +81,6 @@ class SavedNwasTab(ttk.Frame):
             return
         try:
             repository.save_nwa(self.conn, nwa_id=row_id, **dialog.result)
-            self.conn.commit()
             self.on_change()
         except sqlite3.IntegrityError:
             messagebox.showerror(constants.NWA, f"That {constants.NWA} code already exists.", parent=self)
@@ -96,5 +94,4 @@ class SavedNwasTab(ttk.Frame):
         if not messagebox.askyesno(f"Remove {constants.NWA}", f"Remove this {constants.NWA} from active lists?", parent=self):
             return
         repository.remove_nwa(self.conn, row_id)
-        self.conn.commit()
         self.on_change()

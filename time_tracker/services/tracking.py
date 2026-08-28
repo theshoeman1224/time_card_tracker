@@ -8,18 +8,23 @@ from time_tracker.util.time_utils import iso, now_local, parse_iso
 
 
 def get_or_create_work_day(conn: sqlite3.Connection, current: datetime | None = None) -> str:
-    """Get or create a work day for the given date. Returns the work day ID."""
+    """Get or create a work day for the given date. Returns the work day ID.
+
+    Commits on success. Safe to compose inside a caller's transaction: the
+    nested commit only flushes already-complete work.
+    """
     current = current or now_local()
     work_date = current.date().isoformat()
-    row = conn.execute("SELECT id FROM work_days WHERE work_date = ?", (work_date,)).fetchone()
-    if row:
-        return row["id"]
-    work_day_id = repository.new_id()
-    conn.execute(
-        "INSERT INTO work_days(id, work_date, started_at, status) VALUES (?, ?, ?, 'open')",
-        (work_day_id, work_date, iso(current)),
-    )
-    return work_day_id
+    with conn:
+        row = conn.execute("SELECT id FROM work_days WHERE work_date = ?", (work_date,)).fetchone()
+        if row:
+            return row["id"]
+        work_day_id = repository.new_id()
+        conn.execute(
+            "INSERT INTO work_days(id, work_date, started_at, status) VALUES (?, ?, ?, 'open')",
+            (work_day_id, work_date, iso(current)),
+        )
+        return work_day_id
 
 
 def current_open_session(conn: sqlite3.Connection) -> sqlite3.Row | None:
@@ -38,52 +43,61 @@ def current_open_session(conn: sqlite3.Connection) -> sqlite3.Row | None:
 
 
 def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: datetime | None = None) -> str:
-    """Start tracking a work item, or switch if already tracking something else. Returns session ID."""
+    """Start tracking a work item, or switch if already tracking something else. Returns session ID.
+
+    Commits on success; rolls back and re-raises on failure.
+    """
     current = current or now_local()
     now_text = iso(current)
-    active = current_open_session(conn)
-    if active and active["work_item_id"] == work_item_id:
-        return active["id"]
-    if active:
+    with conn:
+        active = current_open_session(conn)
+        if active and active["work_item_id"] == work_item_id:
+            return active["id"]
+        if active:
+            conn.execute(
+                "UPDATE time_sessions SET end_at = ?, updated_at = ? WHERE id = ?",
+                (now_text, now_text, active["id"]),
+            )
+            work_day_id = active["work_day_id"]
+        else:
+            work_day_id = get_or_create_work_day(conn, current)
+        session_id = repository.new_id()
+        snapshot = repository.split_snapshot(conn, work_item_id)
+        conn.execute(
+            """
+            INSERT INTO time_sessions(
+              id, work_day_id, work_item_id, start_at, end_at, split_snapshot_json,
+              source, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, NULL, ?, 'timer', ?, ?)
+            """,
+            (session_id, work_day_id, work_item_id, now_text, snapshot, now_text, now_text),
+        )
+        return session_id
+
+
+def pause(conn: sqlite3.Connection, current: datetime | None = None) -> None:
+    """Close the currently open session. Silent no-op if no session is open."""
+    with conn:
+        active = current_open_session(conn)
+        if not active:
+            return
+        now_text = iso(current or now_local())
         conn.execute(
             "UPDATE time_sessions SET end_at = ?, updated_at = ? WHERE id = ?",
             (now_text, now_text, active["id"]),
         )
-        work_day_id = active["work_day_id"]
-    else:
-        work_day_id = get_or_create_work_day(conn, current)
-    session_id = repository.new_id()
-    snapshot = repository.split_snapshot(conn, work_item_id)
-    conn.execute(
-        """
-        INSERT INTO time_sessions(
-          id, work_day_id, work_item_id, start_at, end_at, split_snapshot_json,
-          source, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, NULL, ?, 'timer', ?, ?)
-        """,
-        (session_id, work_day_id, work_item_id, now_text, snapshot, now_text, now_text),
-    )
-    return session_id
-
-
-def pause(conn: sqlite3.Connection, current: datetime | None = None) -> None:
-    """Close the currently open session. No-op if no session is open."""
-    active = current_open_session(conn)
-    if not active:
-        return
-    now_text = iso(current or now_local())
-    conn.execute("UPDATE time_sessions SET end_at = ?, updated_at = ? WHERE id = ?", (now_text, now_text, active["id"]))
 
 
 def reset_day(conn: sqlite3.Connection, current: datetime | None = None) -> None:
     """Pause any open session and mark the current day as reset."""
     current = current or now_local()
-    pause(conn, current)
-    work_day_id = get_or_create_work_day(conn, current)
-    conn.execute(
-        "UPDATE work_days SET reset_at = ?, status = 'reset' WHERE id = ?",
-        (iso(current), work_day_id),
-    )
+    with conn:
+        pause(conn, current)
+        work_day_id = get_or_create_work_day(conn, current)
+        conn.execute(
+            "UPDATE work_days SET reset_at = ?, status = 'reset' WHERE id = ?",
+            (iso(current), work_day_id),
+        )
 
 
 def list_sessions_for_work_day(conn: sqlite3.Connection, work_day_id: str) -> list[sqlite3.Row]:
@@ -156,19 +170,21 @@ def update_session(
     """Update a session's times, work item, and note. Validates no overlaps.
 
     Re-snapshots the splits if the work item changed, so the session is charged
-    by the item's current splits.
+    by the item's current splits. Commits on success; rolls back and re-raises
+    on failure.
     """
-    session = _validate_session_update(conn, session_id, start_at, end_at)
-    now_text = iso(now_local())
-    snapshot = session["split_snapshot_json"]
-    if work_item_id != session["work_item_id"]:
-        snapshot = repository.split_snapshot(conn, work_item_id)
-    conn.execute(
-        """
-        UPDATE time_sessions
-        SET start_at = ?, end_at = ?, work_item_id = ?, split_snapshot_json = ?,
-            note = ?, edited_at = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        (start_at, end_at, work_item_id, snapshot, note.strip(), now_text, now_text, session_id),
-    )
+    with conn:
+        session = _validate_session_update(conn, session_id, start_at, end_at)
+        now_text = iso(now_local())
+        snapshot = session["split_snapshot_json"]
+        if work_item_id != session["work_item_id"]:
+            snapshot = repository.split_snapshot(conn, work_item_id)
+        conn.execute(
+            """
+            UPDATE time_sessions
+            SET start_at = ?, end_at = ?, work_item_id = ?, split_snapshot_json = ?,
+                note = ?, edited_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (start_at, end_at, work_item_id, snapshot, note.strip(), now_text, now_text, session_id),
+        )

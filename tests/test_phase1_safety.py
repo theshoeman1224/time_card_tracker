@@ -12,11 +12,12 @@ class MoveWorkItemTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             repository.move_work_item(conn, "nonexistent-id", 1)
 
-    def test_move_work_item_boundary_returns_false(self):
+    def test_move_work_item_boundary_raises(self):
         conn = memory_conn()
         _, _, work_item = seed_basic(conn)
-        result = repository.move_work_item(conn, work_item, 1)
-        self.assertFalse(result)
+        with self.assertRaises(ValueError) as ctx:
+            repository.move_work_item(conn, work_item, 1)
+        self.assertIn("bottom", str(ctx.exception))
 
 
 class StatusCheckConstraintTests(unittest.TestCase):
