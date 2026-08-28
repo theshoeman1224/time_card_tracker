@@ -39,11 +39,13 @@ def format_datetime(value: str | None) -> str:
     return parse_iso(value).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def seconds_between(start_at: str, end_at: str | None, fallback: datetime | None = None) -> int:
-    """Calculate seconds between two ISO timestamps. Uses current time if end_at is None."""
-    start = parse_iso(start_at)
-    end = parse_iso(end_at) if end_at else fallback or now_local()
-    return max(0, int((end - start).total_seconds()))
+def seconds_between(start_at: str, end_at: str) -> int:
+    """Calculate seconds between two ISO timestamps, clamped to zero.
+
+    Pure time math — the "open session ends now" rule lives in the tracking
+    module, not here.
+    """
+    return max(0, int((parse_iso(end_at) - parse_iso(start_at)).total_seconds()))
 
 
 def human_duration(seconds: int) -> str:

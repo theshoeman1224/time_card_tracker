@@ -5,8 +5,8 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime
 
-from time_tracker.services import repository
-from time_tracker.util.time_utils import decimal_hours, human_duration, round_seconds, seconds_between, week_bounds
+from time_tracker.services import repository, tracking
+from time_tracker.util.time_utils import decimal_hours, human_duration, round_seconds, week_bounds
 
 
 def report_dates(conn: sqlite3.Connection, period: str, anchor_date: str) -> list[str]:
@@ -61,7 +61,7 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
     work_items: dict[tuple[str, str], int] = defaultdict(int)
     nwas: dict[tuple[str, str], float] = defaultdict(float)
     for row in rows:
-        seconds = seconds_between(row["start_at"], row["end_at"])
+        seconds = tracking.session_seconds(row)
         work_items[(row["work_item_id"], row["template_name"])] += seconds
         # Prorate session time to each NWA using the split frozen at session start.
         for split in json.loads(row["split_snapshot_json"]):
