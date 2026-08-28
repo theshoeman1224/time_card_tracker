@@ -26,6 +26,10 @@ class WorkItemsTab(ttk.Frame):
         self.elapsed_label.pack(side="left", padx=16)
         ttk.Button(status, text="Pause / Stop", command=self.pause).pack(side="right")
 
+        bottom_bar = ttk.Frame(self)
+        bottom_bar.pack(side="bottom", fill="x", pady=(8, 0))
+        ttk.Button(bottom_bar, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x")
+
         content = ttk.PanedWindow(self, orient="horizontal")
         content.pack(fill="both", expand=True)
 
@@ -33,15 +37,6 @@ class WorkItemsTab(ttk.Frame):
         right = ttk.Frame(content)
         content.add(left, weight=2)
         content.add(right, weight=3)
-
-        left_bottom = ttk.Frame(left)
-        left_bottom.pack(side="bottom", fill="x")
-        ttk.Button(left_bottom, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x")
-
-        right_bottom = ttk.Frame(right)
-        right_bottom.pack(side="bottom", fill="x")
-        self.summary = ttk.Label(right_bottom, text="")
-        self.summary.pack(fill="x")
 
         item_toolbar = ttk.Frame(left)
         item_toolbar.pack(fill="x", pady=(0, 8))
@@ -62,8 +57,9 @@ class WorkItemsTab(ttk.Frame):
 
         session_toolbar = ttk.Frame(right)
         session_toolbar.pack(fill="x", pady=(0, 8))
-        ttk.Label(session_toolbar, text="Current Day Sessions").pack(side="left")
         ttk.Button(session_toolbar, text="Edit Session", command=self.edit_session).pack(side="right")
+        self.summary = ttk.Label(session_toolbar, text="")
+        self.summary.pack(side="right", padx=(0, 8))
 
         self.sessions = ttk.Treeview(
             right,
@@ -128,7 +124,7 @@ class WorkItemsTab(ttk.Frame):
                 ),
             )
             self._session_rows[row["id"]] = row
-        self.summary.config(text=f"Current day total: {human_duration(total)}")
+        self.summary.config(text=f"Total: {human_duration(total)}")
 
     def _refresh_status(self, active: sqlite3.Row | None) -> None:
         if not active:
