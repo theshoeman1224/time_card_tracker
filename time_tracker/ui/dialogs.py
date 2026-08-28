@@ -21,9 +21,14 @@ class BaseDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
-    def _create_button_frame(self) -> ttk.Frame:
+    def _create_button_frame(self, row: int | None = None) -> ttk.Frame:
+        # Dialogs that grid their fields into themselves pass a row; dialogs
+        # that pack a content frame use the default pack placement.
         buttons = ttk.Frame(self)
-        buttons.pack(side="bottom", fill="x", padx=12, pady=12)
+        if row is None:
+            buttons.pack(side="bottom", fill="x", padx=12, pady=12)
+        else:
+            buttons.grid(row=row, columnspan=2, sticky="ew", padx=12, pady=12)
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right", padx=(6, 0))
         ttk.Button(buttons, text="Save", command=self._save).pack(side="right")
         return buttons
@@ -63,7 +68,7 @@ class NwaDialog(BaseDialog):
         self.tags = ttk.Entry(self, width=40)
         self.tags.grid(row=3, column=1, padx=12, pady=4)
 
-        self._create_button_frame()
+        self._create_button_frame(row=4)
 
         if initial:
             self.code.insert(0, initial["code"])
@@ -223,7 +228,7 @@ class SessionDialog(BaseDialog):
         self.note = ttk.Entry(self, width=28)
         self.note.grid(row=3, column=1, padx=12, pady=4)
 
-        self._create_button_frame()
+        self._create_button_frame(row=4)
 
         self.start.insert(0, format_datetime(session["start_at"]))
         self.end.insert(0, format_datetime(session["end_at"]))
