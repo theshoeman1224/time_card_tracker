@@ -69,11 +69,6 @@ class SecondsBetweenTests(unittest.TestCase):
         result = seconds_between("2026-07-02T09:00:00-04:00", "2026-07-02T10:00:00-04:00")
         self.assertEqual(result, 3600)
 
-    def test_end_none_uses_now(self):
-        result = seconds_between("2026-07-02T09:00:00-04:00", None)
-        self.assertIsInstance(result, int)
-        self.assertGreaterEqual(result, 0)
-
     def test_negative_clamped_to_zero(self):
         result = seconds_between("2026-07-02T10:00:00-04:00", "2026-07-02T09:00:00-04:00")
         self.assertEqual(result, 0)

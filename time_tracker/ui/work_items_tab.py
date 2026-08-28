@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 from time_tracker import constants
 from time_tracker.services import repository, tracking
 from time_tracker.ui.dialogs import SessionDialog, WorkItemDialog
-from time_tracker.util.time_utils import format_datetime, human_duration, seconds_between
+from time_tracker.util.time_utils import format_datetime, human_duration
 
 
 class WorkItemsTab(ttk.Frame):
@@ -111,10 +111,8 @@ class WorkItemsTab(ttk.Frame):
         if not day:
             self.summary.config(text="No work tracked today.")
             return
-        total = 0
         for row in tracking.list_sessions_for_work_day(self.conn, day["id"]):
-            seconds = seconds_between(row["start_at"], row["end_at"])
-            total += seconds
+            seconds = tracking.session_seconds(row)
             self.sessions.insert(
                 "",
                 "end",
@@ -127,7 +125,7 @@ class WorkItemsTab(ttk.Frame):
                 ),
             )
             self._session_rows[row["id"]] = row
-        self.summary.config(text=f"Total: {human_duration(total)}")
+        self.summary.config(text=f"Total: {human_duration(tracking.work_day_seconds(self.conn, day['id']))}")
 
     def _refresh_status(self, active: sqlite3.Row | None) -> None:
         if not active:
@@ -135,7 +133,7 @@ class WorkItemsTab(ttk.Frame):
             self.elapsed_label.config(text="0:00")
             return
         self.active_label.config(text=f"Tracking: {active['work_item_name']} ({active['work_date']})")
-        self.elapsed_label.config(text=human_duration(seconds_between(active["start_at"], None)))
+        self.elapsed_label.config(text=human_duration(tracking.session_seconds(active)))
 
     def _tick(self) -> None:
         """Update the elapsed-time label every second while the window is open."""

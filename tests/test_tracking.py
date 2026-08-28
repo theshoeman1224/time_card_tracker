@@ -106,5 +106,39 @@ class TrackingTests(unittest.TestCase):
         self.assertEqual(day["status"], "reset")
 
 
+class DayTotalsTests(unittest.TestCase):
+    """The 'open session ends now' rule lives here, not in time_utils or the UI."""
+
+    def setUp(self):
+        self.conn = memory_conn()
+        self.nwa_a, self.nwa_b, self.work_item = seed_basic(self.conn)
+
+    def _sessions(self):
+        day = tracking.today_work_day(self.conn, datetime.fromisoformat("2026-07-02T11:00:00-04:00"))
+        return tracking.list_sessions_for_work_day(self.conn, day["id"])
+
+    def test_closed_session_spans_its_times(self):
+        tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
+        tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
+
+        self.assertEqual(tracking.session_seconds(self._sessions()[0]), 3600)
+
+    def test_open_session_spans_until_current(self):
+        tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
+        session = self._sessions()[0]
+
+        seconds = tracking.session_seconds(session, datetime.fromisoformat("2026-07-02T09:30:00-04:00"))
+        self.assertEqual(seconds, 1800)
+
+    def test_work_day_seconds_includes_open_session_up_to_current(self):
+        tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
+        tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
+        tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T10:30:00-04:00"))
+        day = tracking.today_work_day(self.conn, datetime.fromisoformat("2026-07-02T11:00:00-04:00"))
+
+        total = tracking.work_day_seconds(self.conn, day["id"], datetime.fromisoformat("2026-07-02T11:00:00-04:00"))
+        self.assertEqual(total, 3600 + 1800)
+
+
 if __name__ == "__main__":
     unittest.main()

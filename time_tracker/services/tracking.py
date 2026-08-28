@@ -116,6 +116,18 @@ def list_sessions_for_work_day(conn: sqlite3.Connection, work_day_id: str) -> li
     )
 
 
+def session_seconds(session: sqlite3.Row, current: datetime | None = None) -> int:
+    """Tracked seconds in one session. An open session spans until `current` (default now)."""
+    start = parse_iso(session["start_at"])
+    end = parse_iso(session["end_at"]) if session["end_at"] else current or now_local()
+    return max(0, int((end - start).total_seconds()))
+
+
+def work_day_seconds(conn: sqlite3.Connection, work_day_id: str, current: datetime | None = None) -> int:
+    """Total tracked seconds in a work day, including an open session up to `current` (default now)."""
+    return sum(session_seconds(session, current) for session in list_sessions_for_work_day(conn, work_day_id))
+
+
 def work_day_for_date(conn: sqlite3.Connection, work_date: str) -> sqlite3.Row | None:
     """Get a work day by date string (YYYY-MM-DD), or None if not found."""
     return conn.execute("SELECT * FROM work_days WHERE work_date = ?", (work_date,)).fetchone()
