@@ -19,6 +19,9 @@ class WorkItemsTab(ttk.Frame):
         self.on_change = on_change
         self._work_rows: dict[str, sqlite3.Row] = {}
         self._session_rows: dict[str, sqlite3.Row] = {}
+        # Public work items obsoleted by an import during this app session; shown in
+        # red until restart even though they are hidden from the active list.
+        self._session_obsolete_items: set[str] = set()
 
         status = ttk.Frame(self)
         status.pack(fill="x", pady=(0, 10))
@@ -48,11 +51,16 @@ class WorkItemsTab(ttk.Frame):
         ttk.Button(item_toolbar, text="↑", width=2, command=lambda: self.move_work_item(-1)).pack(side="right", padx=(6, 0))
         ttk.Button(item_toolbar, text="↓", width=2, command=lambda: self.move_work_item(1)).pack(side="right")
 
-        self.items = ttk.Treeview(left, columns=("name", "splits"), show="headings", selectmode="browse")
+        self.alert_label = ttk.Label(left, text="", foreground="red", wraplength=420, justify="left")
+
+        self.items = ttk.Treeview(left, columns=("name", "splits", "scope"), show="headings", selectmode="browse")
         self.items.heading("name", text=constants.WORK_ITEM)
         self.items.heading("splits", text=f"{constants.NWA} Splits")
-        self.items.column("name", width=220)
-        self.items.column("splits", width=260)
+        self.items.heading("scope", text=constants.SCOPE)
+        self.items.column("name", width=200)
+        self.items.column("splits", width=240)
+        self.items.column("scope", width=80, anchor="center")
+        self.items.tag_configure("stale", foreground="red")
         self.items.pack(fill="both", expand=True)
         self.items.bind("<Double-1>", lambda _event: self.start_selected())
         self.items.bind("<Return>", lambda _event: self.start_selected())
@@ -92,17 +100,66 @@ class WorkItemsTab(ttk.Frame):
         selected = self.selected_work_item_id()
         self.items.delete(*self.items.get_children())
         self._work_rows.clear()
-        for row in repository.list_work_items(self.conn):
+        rows = list(repository.list_work_items(self.conn))
+        shown = {row["id"] for row in rows}
+        for item_id in sorted(self._session_obsolete_items):
+            if item_id in shown:
+                continue
+            row = repository.get_work_item(self.conn, item_id)
+            if row and row["scope"] == "public" and row["is_obsolete"] and not row["is_deleted"]:
+                rows.append(row)
+
+        stale_ids = repository.stale_work_item_ids(self.conn)
+        obsolete_shown = 0
+        obsolete_item_ids: set[str] = set()
+        for row in rows:
             splits = repository.get_work_item_splits(self.conn, row["id"])
             split_text = ", ".join(f"{split['code']} {split['percent_basis_points'] / 100:.0f}%" for split in splits)
             name = row["name"]
             # Mark the currently tracked item.
             if active and active["work_item_id"] == row["id"]:
                 name = f"* {name}"
-            self.items.insert("", "end", iid=row["id"], values=(name, split_text))
+            scope = constants.PUBLIC if row["scope"] == "public" else constants.PERSONAL
+            tags: tuple[str, ...] = ()
+            if row["scope"] == "public" and row["is_obsolete"]:
+                tags = ("stale",)
+                obsolete_shown += 1
+                obsolete_item_ids.add(row["id"])
+            elif row["id"] in stale_ids:
+                tags = ("stale",)
+            self.items.insert(
+                "", "end", iid=row["id"], values=(name, split_text, scope), tags=tags
+            )
             self._work_rows[row["id"]] = row
+
+        alerts = []
+        relink_needed = stale_ids - obsolete_item_ids
+        if relink_needed:
+            alerts.append(
+                f"{len(relink_needed)} task(s) reference charge codes dropped from the public list. "
+                "Edit each task to relink its splits to the new list."
+            )
+        if obsolete_shown:
+            alerts.append(
+                f"{obsolete_shown} public task(s) were dropped by a public list import and are "
+                "shown in red until restart."
+            )
+        # The banner takes vertical space only when it has something to say,
+        # so the item tree stays aligned with the sessions pane.
+        text = "\n".join(alerts)
+        self.alert_label.config(text=text)
+        if text:
+            self.alert_label.pack(fill="x", pady=(0, 4), before=self.items)
+        else:
+            self.alert_label.pack_forget()
+
         if selected and selected in self._work_rows:
             self.items.selection_set(selected)
+
+    def on_public_list_imported(self, report: dict) -> None:
+        """Called after a public list import so obsoleted items stay visible until restart."""
+        self._session_obsolete_items.update(report["work_items_obsoleted_ids"])
+        self.refresh()
 
     def _refresh_sessions(self) -> None:
         self.sessions.delete(*self.sessions.get_children())
@@ -197,6 +254,14 @@ class WorkItemsTab(ttk.Frame):
     def start_selected(self) -> None:
         row_id = self.selected_work_item_id()
         if not row_id:
+            return
+        row = self._work_rows.get(row_id)
+        if row and row["scope"] == "public" and row["is_obsolete"]:
+            messagebox.showerror(
+                "Tracking",
+                "This work item was dropped from the public list and can no longer be tracked.",
+                parent=self,
+            )
             return
         try:
             tracking.start_or_switch(self.conn, row_id)

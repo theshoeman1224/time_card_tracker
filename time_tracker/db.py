@@ -8,7 +8,7 @@ from time_tracker.util.time_utils import iso, now_local
 
 
 # Bump when the schema changes; the applied version is recorded in schema_migrations.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 SCHEMA_SQL = """
@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS nwas (
   code TEXT NOT NULL UNIQUE,
   name TEXT,
   notes TEXT,
+  scope TEXT NOT NULL DEFAULT 'personal' CHECK(scope IN ('personal', 'public')),
+  is_obsolete INTEGER NOT NULL DEFAULT 0,
   is_deleted INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -46,6 +48,8 @@ CREATE TABLE IF NOT EXISTS work_item_templates (
   name TEXT NOT NULL,
   description TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  scope TEXT NOT NULL DEFAULT 'personal' CHECK(scope IN ('personal', 'public')),
+  is_obsolete INTEGER NOT NULL DEFAULT 0,
   is_deleted INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -97,6 +101,33 @@ CREATE INDEX IF NOT EXISTS idx_sessions_start ON time_sessions(start_at);
 DEFAULT_SETTINGS = {
     "rounding_increment_minutes": "15",
     "rounding_mode": "nearest",
+    "allow_public_edits": "0",
+}
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """Return the set of column names present on a table."""
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _migrate_v2(conn: sqlite3.Connection) -> None:
+    """Add scope and is_obsolete columns for public list support (idempotent)."""
+    for table in ("nwas", "work_item_templates"):
+        columns = _table_columns(conn, table)
+        if "scope" not in columns:
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN scope TEXT NOT NULL DEFAULT 'personal' "
+                "CHECK(scope IN ('personal', 'public'))"
+            )
+        if "is_obsolete" not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN is_obsolete INTEGER NOT NULL DEFAULT 0")
+
+
+# Incremental migration steps keyed by the version they upgrade the schema TO.
+# Each step must be idempotent: SCHEMA_SQL runs before the steps on every open,
+# so a freshly created v2 database must tolerate its own steps running again.
+MIGRATION_STEPS: dict[int, callable] = {
+    2: _migrate_v2,
 }
 
 
@@ -110,10 +141,13 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """Create tables if missing, record the schema version, and seed default settings."""
+    """Create tables if missing, run unapplied migration steps, and seed default settings."""
     conn.executescript(SCHEMA_SQL)
-    applied = conn.execute("SELECT 1 FROM schema_migrations WHERE version = ?", (SCHEMA_VERSION,)).fetchone()
-    if not applied:
+    applied = {row["version"] for row in conn.execute("SELECT version FROM schema_migrations")}
+    for version, step in sorted(MIGRATION_STEPS.items()):
+        if version not in applied:
+            step(conn)
+    if SCHEMA_VERSION not in applied:
         conn.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
             (SCHEMA_VERSION, iso(now_local())),

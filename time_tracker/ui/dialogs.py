@@ -125,11 +125,14 @@ class WorkItemDialog(BaseDialog):
         self.splits.heading("percent", text="Percent")
         self.splits.column("nwa", width=420)
         self.splits.column("percent", width=100, anchor="e")
+        self.splits.tag_configure("stale", foreground="red")
         self.splits.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=8, pady=8)
 
         self.nwa_values = []
         for row in repository.list_nwas(conn):
             label = f"{row['code']} - {row['name'] or ''}".strip()
+            if row["scope"] == "public":
+                label = f"{label} [{constants.PUBLIC.lower()}]"
             self.nwa_values.append((label, row["id"]))
         self._nwa_id_map = dict(self.nwa_values)
         self.nwa_combo = ttk.Combobox(split_frame, values=[label for label, _ in self.nwa_values], state="readonly")
@@ -146,7 +149,14 @@ class WorkItemDialog(BaseDialog):
             self.name.insert(0, initial["name"])
             self.description.insert("1.0", initial["description"] or "")
             for split in repository.get_work_item_splits(conn, initial["id"]):
-                item = self.splits.insert("", "end", values=(split["code"], basis_points_to_percent(split["percent_basis_points"])))
+                # Splits on obsolete public NWAs show red: they need relinking.
+                stale = bool(split["is_obsolete"])
+                item = self.splits.insert(
+                    "",
+                    "end",
+                    values=(split["code"], basis_points_to_percent(split["percent_basis_points"])),
+                    tags=("stale",) if stale else (),
+                )
                 self._split_ids[item] = split["nwa_id"]
         self.wait_window()
 

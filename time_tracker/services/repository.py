@@ -13,8 +13,18 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
-def list_nwas(conn: sqlite3.Connection, include_deleted: bool = False, query: str = "") -> list[sqlite3.Row]:
-    """List NWAs with optional search filter. Returns rows with a 'tags' column."""
+def list_nwas(
+    conn: sqlite3.Connection,
+    include_deleted: bool = False,
+    query: str = "",
+    scope: str | None = None,
+    include_obsolete: bool = False,
+) -> list[sqlite3.Row]:
+    """List NWAs with optional search filter. Returns rows with a 'tags' column.
+
+    scope restricts to 'personal' or 'public' (None = all); obsolete public NWAs are
+    hidden unless include_obsolete is set.
+    """
     sql = """
         SELECT n.*,
                COALESCE(GROUP_CONCAT(t.name, ', '), '') AS tags
@@ -22,8 +32,12 @@ def list_nwas(conn: sqlite3.Connection, include_deleted: bool = False, query: st
         LEFT JOIN nwa_tags nt ON nt.nwa_id = n.id
         LEFT JOIN tags t ON t.id = nt.tag_id
         WHERE (? OR n.is_deleted = 0)
+          AND (? OR n.is_obsolete = 0 OR n.scope != 'public')
     """
-    params: list[object] = [1 if include_deleted else 0]
+    params: list[object] = [1 if include_deleted else 0, 1 if include_obsolete else 0]
+    if scope is not None:
+        sql += " AND n.scope = ?"
+        params.append(scope)
     if query.strip():
         sql += " AND (n.code LIKE ? OR n.name LIKE ? OR t.name LIKE ?)"
         needle = f"%{query.strip()}%"
@@ -39,8 +53,12 @@ def save_nwa(
     notes: str = "",
     tags: str | list[str] = "",
     nwa_id: str | None = None,
+    scope: str = "personal",
 ) -> str:
-    """Create or update an NWA. Returns the NWA ID. Commits on success; rolls back and re-raises on failure."""
+    """Create or update an NWA. Returns the NWA ID. Commits on success; rolls back and re-raises on failure.
+
+    scope only applies on create; an update never changes an NWA's scope.
+    """
     now = iso(now_local())
     code = code.strip()
     if not code:
@@ -55,8 +73,8 @@ def save_nwa(
         else:
             saved_id = new_id()
             conn.execute(
-                "INSERT INTO nwas(id, code, name, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (saved_id, code, name.strip(), notes.strip(), now, now),
+                "INSERT INTO nwas(id, code, name, notes, scope, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (saved_id, code, name.strip(), notes.strip(), scope, now, now),
             )
         replace_nwa_tags(conn, saved_id, tags)
         return saved_id
@@ -94,18 +112,28 @@ def remove_nwa(conn: sqlite3.Connection, nwa_id: str) -> None:
         conn.execute("UPDATE nwas SET is_deleted = 1, updated_at = ? WHERE id = ?", (iso(now_local()), nwa_id))
 
 
-def list_work_items(conn: sqlite3.Connection, include_deleted: bool = False) -> list[sqlite3.Row]:
-    """List work items ordered by sort_order and name."""
-    return list(
-        conn.execute(
-            """
-            SELECT * FROM work_item_templates
-            WHERE (? OR is_deleted = 0)
-            ORDER BY sort_order, name
-            """,
-            (1 if include_deleted else 0,),
-        )
-    )
+def list_work_items(
+    conn: sqlite3.Connection,
+    include_deleted: bool = False,
+    scope: str | None = None,
+    include_obsolete: bool = False,
+) -> list[sqlite3.Row]:
+    """List work items ordered by sort_order and name.
+
+    scope restricts to 'personal' or 'public' (None = all); obsolete public items are
+    hidden unless include_obsolete is set.
+    """
+    sql = """
+        SELECT * FROM work_item_templates
+        WHERE (? OR is_deleted = 0)
+          AND (? OR is_obsolete = 0 OR scope != 'public')
+    """
+    params: list[object] = [1 if include_deleted else 0, 1 if include_obsolete else 0]
+    if scope is not None:
+        sql += " AND scope = ?"
+        params.append(scope)
+    sql += " ORDER BY sort_order, name"
+    return list(conn.execute(sql, params))
 
 
 def get_work_item(conn: sqlite3.Connection, work_item_id: str) -> sqlite3.Row | None:
@@ -114,11 +142,15 @@ def get_work_item(conn: sqlite3.Connection, work_item_id: str) -> sqlite3.Row | 
 
 
 def get_work_item_splits(conn: sqlite3.Connection, work_item_id: str) -> list[sqlite3.Row]:
-    """Get NWA splits for a work item, ordered by NWA code."""
+    """Get NWA splits for a work item, ordered by NWA code.
+
+    Includes the NWA's scope and is_obsolete flags so callers can flag stale splits.
+    """
     return list(
         conn.execute(
             """
-            SELECT s.work_item_id, s.nwa_id, s.percent_basis_points, n.code, n.name
+            SELECT s.work_item_id, s.nwa_id, s.percent_basis_points,
+                   n.code, n.name, n.scope, n.is_obsolete
             FROM work_item_nwa_splits s
             JOIN nwas n ON n.id = s.nwa_id
             WHERE s.work_item_id = ?
@@ -134,6 +166,7 @@ def create_work_item(
     name: str,
     description: str,
     splits: list[tuple[str, int]],
+    scope: str = "personal",
 ) -> str:
     """Create a new work item. Returns the work item ID. Commits on success; rolls back and re-raises on failure."""
     validate_split_total(splits)
@@ -146,10 +179,10 @@ def create_work_item(
         sort_order = conn.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM work_item_templates").fetchone()[0]
         conn.execute(
             """
-            INSERT INTO work_item_templates(id, name, description, sort_order, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO work_item_templates(id, name, description, sort_order, scope, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (work_item_id, name, description.strip(), sort_order, now, now),
+            (work_item_id, name, description.strip(), sort_order, scope, now, now),
         )
         conn.executemany(
             """
@@ -196,14 +229,16 @@ def save_work_item(
     description: str,
     splits: list[tuple[str, int]],
     work_item_id: str | None = None,
+    scope: str = "personal",
 ) -> str:
     """Create or update a work item. Returns the work item ID.
 
     A dispatcher over create_work_item/update_work_item, which own durability.
+    scope only applies on create; an update never changes a work item's scope.
     """
     if work_item_id:
         return update_work_item(conn, work_item_id, name, description, splits)
-    return create_work_item(conn, name, description, splits)
+    return create_work_item(conn, name, description, splits, scope=scope)
 
 
 def remove_work_item(conn: sqlite3.Connection, work_item_id: str) -> None:
@@ -213,6 +248,35 @@ def remove_work_item(conn: sqlite3.Connection, work_item_id: str) -> None:
             "UPDATE work_item_templates SET is_deleted = 1, updated_at = ? WHERE id = ?",
             (iso(now_local()), work_item_id),
         )
+
+
+def list_stale_work_items(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """List (work item, stale NWA) pairs where a split points at an obsolete public NWA.
+
+    A work item is stale when at least one of its splits references a public NWA that a
+    newer public list dropped. Returns one row per stale split so the UI can highlight
+    the affected items and name the codes that need relinking.
+    """
+    return list(
+        conn.execute(
+            """
+            SELECT w.id AS work_item_id, w.name AS work_item_name, w.scope AS work_item_scope,
+                   w.is_obsolete AS work_item_obsolete,
+                   n.id AS nwa_id, n.code AS nwa_code
+            FROM work_item_templates w
+            JOIN work_item_nwa_splits s ON s.work_item_id = w.id
+            JOIN nwas n ON n.id = s.nwa_id
+            WHERE w.is_deleted = 0
+              AND n.scope = 'public' AND n.is_obsolete = 1
+            ORDER BY w.sort_order, w.name, n.code
+            """
+        )
+    )
+
+
+def stale_work_item_ids(conn: sqlite3.Connection) -> set[str]:
+    """Return the IDs of work items with at least one split pointing at an obsolete public NWA."""
+    return {row["work_item_id"] for row in list_stale_work_items(conn)}
 
 
 def move_work_item(conn: sqlite3.Connection, work_item_id: str, delta: int) -> None:

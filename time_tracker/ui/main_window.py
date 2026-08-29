@@ -22,7 +22,9 @@ class MainWindow(ttk.Frame):
 
         self.saved_nwas = SavedNwasTab(self.notebook, conn, self.refresh_all)
         self.work_items = WorkItemsTab(self.notebook, conn, self.refresh_all)
-        self.reports = SettingsReportsTab(self.notebook, conn, self.refresh_all)
+        self.reports = SettingsReportsTab(
+            self.notebook, conn, self.refresh_all, on_public_import=self.work_items.on_public_list_imported
+        )
 
         self.notebook.add(self.saved_nwas, text=f"Saved {constants.NWA}s")
         self.notebook.add(self.work_items, text=f"{constants.WORK_ITEM}s / Current Work")
