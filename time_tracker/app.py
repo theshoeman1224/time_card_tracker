@@ -5,8 +5,22 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from time_tracker import db
+from time_tracker.paths import log_path
 from time_tracker.ui.main_window import MainWindow
 from time_tracker.util.logging_config import configure_logging
+
+
+def report_callback_error(exc_type, exc, tb, show_error=messagebox.showerror) -> None:
+    """Log an error that escaped a Tk callback and tell the user.
+
+    Installed as root.report_callback_exception. Tk's default prints to stderr,
+    which the windowed build doesn't have, so errors would otherwise vanish.
+    """
+    logging.error("Unhandled error in a UI callback", exc_info=(exc_type, exc, tb))
+    show_error(
+        "Time Card Tracker",
+        f"Something went wrong: {exc}\n\nDetails were written to the log:\n{log_path()}",
+    )
 
 
 def main() -> None:
@@ -22,6 +36,7 @@ def main() -> None:
         return
 
     root = tk.Tk()
+    root.report_callback_exception = report_callback_error
     root.title("Time Card Tracker")
     root.geometry("1100x720")
     root.minsize(900, 600)
