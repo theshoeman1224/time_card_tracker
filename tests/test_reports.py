@@ -37,7 +37,8 @@ class ReportTests(unittest.TestCase):
 
         report = reports.generate_report(self.conn, "daily", "2026-07-02")
         self.assertEqual(report["work_items"][0]["raw"], "1:12:00")
-        self.assertEqual(report["work_items"][0]["rounded"], "1.2")
+        # A 1-minute increment isn't a multiple of 6 minutes, so hours show two places.
+        self.assertEqual(report["work_items"][0]["rounded"], "1.20")
 
     def test_monthly_report_groups_by_month(self):
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
@@ -120,13 +121,26 @@ class RoundingModeTests(unittest.TestCase):
         row = reports.generate_report(self.conn, "daily", "2026-07-02")["work_items"][0]
         self.assertEqual(row["rounded_seconds"], 900)
 
-    @unittest.expectedFailure  # Bug: one-decimal display shows 0.25 h as "0.3".
     def test_quarter_hour_rounding_displays_exactly(self):
         track(self.conn, self.work_item, "2026-07-02T09:00:00-04:00", "2026-07-02T09:15:00-04:00")
 
         row = reports.generate_report(self.conn, "daily", "2026-07-02")["work_items"][0]
         self.assertEqual(row["rounded_seconds"], 900)
         self.assertEqual(row["rounded"], "0.25")
+
+
+    def test_six_minute_multiples_keep_one_decimal_place(self):
+        repository.set_setting(self.conn, "rounding_increment_minutes", "6")
+        track(self.conn, self.work_item, "2026-07-02T09:00:00-04:00", "2026-07-02T09:18:00-04:00")
+
+        self.assertEqual(reports.generate_report(self.conn, "daily", "2026-07-02")["work_items"][0]["rounded"], "0.3")
+
+    def test_nwa_rows_use_the_same_places_as_work_items(self):
+        track(self.conn, self.work_item, "2026-07-02T09:00:00-04:00", "2026-07-02T10:00:00-04:00")
+
+        report = reports.generate_report(self.conn, "daily", "2026-07-02")
+        self.assertEqual(report["work_items"][0]["rounded"], "1.00")
+        self.assertEqual({row["code"]: row["rounded"] for row in report["nwas"]}, {"A": "0.75", "B": "0.25"})
 
 
 class PeriodTests(unittest.TestCase):

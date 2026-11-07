@@ -6,7 +6,14 @@ from collections import defaultdict
 from datetime import datetime
 
 from time_tracker.services import repository, tracking
-from time_tracker.util.time_utils import apportion_rounded, decimal_hours, human_duration, round_seconds, week_bounds
+from time_tracker.util.time_utils import (
+    apportion_rounded,
+    decimal_hours,
+    hour_places,
+    human_duration,
+    round_seconds,
+    week_bounds,
+)
 
 
 def report_dates(conn: sqlite3.Connection, period: str, anchor_date: str) -> list[str]:
@@ -72,6 +79,7 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
 
     increment = int(repository.get_setting(conn, "rounding_increment_minutes", "15"))
     mode = repository.get_setting(conn, "rounding_mode", "nearest")
+    places = hour_places(increment)
     work_item_rows = []
     for (item_id, name), seconds in sorted(work_items.items(), key=lambda item: item[0][1].lower()):
         rounded_seconds = round_seconds(seconds, increment, mode)
@@ -82,7 +90,7 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
                 "raw_seconds": seconds,
                 "raw": human_duration(seconds),
                 "rounded_seconds": rounded_seconds,
-                "rounded": decimal_hours(rounded_seconds),
+                "rounded": decimal_hours(rounded_seconds, places),
             }
         )
 
@@ -111,7 +119,7 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
                 "raw_seconds": int(seconds),
                 "raw": human_duration(int(seconds)),
                 "rounded_seconds": rounded_seconds,
-                "rounded": decimal_hours(rounded_seconds),
+                "rounded": decimal_hours(rounded_seconds, places),
             }
         )
 

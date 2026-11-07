@@ -58,13 +58,22 @@ def human_duration(seconds: int) -> str:
     return f"{sign}{hours}:{minutes:02d}:{secs:02d}"
 
 
-def decimal_hours(seconds: int | float) -> str:
-    """Convert seconds to decimal hours with one decimal place (e.g., '1.2').
+def decimal_hours(seconds: int | float, places: int = 1) -> str:
+    """Convert seconds to decimal hours with the given decimal places (e.g., '1.2').
 
     Uses Decimal to avoid float representation errors in the quantize step.
     """
     hours = Decimal(str(seconds)) / Decimal("3600")
-    return str(hours.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+    return str(hours.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
+
+def hour_places(increment_minutes: int) -> int:
+    """Decimal places needed to show rounded hours for an increment.
+
+    Multiples of 6 minutes are exact tenths of an hour, so one place is enough;
+    any other increment (e.g. 15 minutes = 0.25 h) needs two.
+    """
+    return 1 if max(1, int(increment_minutes)) % 6 == 0 else 2
 
 
 def round_seconds(seconds: float, increment_minutes: int, mode: str = "nearest") -> int:
