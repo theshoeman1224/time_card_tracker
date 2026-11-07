@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from time_tracker import constants
 from time_tracker.services import repository, tracking
 from time_tracker.ui.dialogs import SessionDialog, WorkItemDialog
+from time_tracker.ui.widgets import scrolled_tree
 from time_tracker.util.time_utils import format_date, format_datetime, human_duration
 
 
@@ -29,11 +30,11 @@ class WorkItemsTab(ttk.Frame):
         self.active_label.pack(side="left")
         self.elapsed_label = ttk.Label(status, text="0:00")
         self.elapsed_label.pack(side="left", padx=16)
-        ttk.Button(status, text="Pause / Stop", command=self.pause).pack(side="right")
+        ttk.Button(status, text="Pause", command=self.pause).pack(side="right")
 
         bottom_bar = ttk.Frame(self)
         bottom_bar.pack(side="bottom", fill="x", pady=(8, 0))
-        ttk.Button(bottom_bar, text="Start / Switch to Selected", command=self.start_selected).pack(fill="x")
+        ttk.Button(bottom_bar, text="Start", command=self.start_selected).pack(fill="x")
 
         content = ttk.PanedWindow(self, orient="horizontal")
         content.pack(fill="both", expand=True)
@@ -53,7 +54,9 @@ class WorkItemsTab(ttk.Frame):
 
         self.alert_label = ttk.Label(left, text="", foreground="red", wraplength=420, justify="left")
 
-        self.items = ttk.Treeview(left, columns=("name", "splits", "scope"), show="headings", selectmode="browse")
+        self._items_frame, self.items = scrolled_tree(
+            left, columns=("name", "splits", "scope"), show="headings", selectmode="browse"
+        )
         self.items.heading("name", text=constants.WORK_ITEM)
         self.items.heading("splits", text=f"{constants.NWA} Splits")
         self.items.heading("scope", text=constants.SCOPE)
@@ -61,7 +64,7 @@ class WorkItemsTab(ttk.Frame):
         self.items.column("splits", width=240)
         self.items.column("scope", width=80, anchor="center")
         self.items.tag_configure("stale", foreground="red")
-        self.items.pack(fill="both", expand=True)
+        self._items_frame.pack(fill="both", expand=True)
         self.items.bind("<Double-1>", lambda _event: self.start_selected())
         self.items.bind("<Return>", lambda _event: self.start_selected())
 
@@ -71,7 +74,7 @@ class WorkItemsTab(ttk.Frame):
         self.summary = ttk.Label(session_toolbar, text="")
         self.summary.pack(side="right", padx=(0, 8))
 
-        self.sessions = ttk.Treeview(
+        sessions_frame, self.sessions = scrolled_tree(
             right,
             columns=("start", "end", "duration", "work_item"),
             show="headings",
@@ -85,7 +88,7 @@ class WorkItemsTab(ttk.Frame):
         ]:
             self.sessions.heading(column, text=label)
             self.sessions.column(column, width=width)
-        self.sessions.pack(fill="both", expand=True)
+        sessions_frame.pack(fill="both", expand=True)
 
         self.refresh()
         self.after(1000, self._tick)
@@ -149,7 +152,7 @@ class WorkItemsTab(ttk.Frame):
         text = "\n".join(alerts)
         self.alert_label.config(text=text)
         if text:
-            self.alert_label.pack(fill="x", pady=(0, 4), before=self.items)
+            self.alert_label.pack(fill="x", pady=(0, 4), before=self._items_frame)
         else:
             self.alert_label.pack_forget()
 

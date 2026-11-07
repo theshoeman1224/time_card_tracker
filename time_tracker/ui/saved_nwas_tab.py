@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from time_tracker import constants
 from time_tracker.services import repository
 from time_tracker.ui.dialogs import NwaDialog
+from time_tracker.ui.widgets import scrolled_tree
 
 
 class SavedNwasTab(ttk.Frame):
@@ -31,7 +32,7 @@ class SavedNwasTab(ttk.Frame):
         ttk.Button(toolbar, text="Edit", command=self.edit_nwa).pack(side="right", padx=(6, 0))
         ttk.Button(toolbar, text="Remove", command=self.remove_nwa).pack(side="right")
 
-        self.tree = ttk.Treeview(
+        tree_frame, self.tree = scrolled_tree(
             self, columns=("code", "name", "tags", "notes", "scope"), show="headings", selectmode="browse"
         )
         self.tree.heading("code", text=constants.NWA)
@@ -45,7 +46,7 @@ class SavedNwasTab(ttk.Frame):
         self.tree.column("notes", width=300)
         self.tree.column("scope", width=80, anchor="center")
         self.tree.tag_configure("obsolete", foreground="red")
-        self.tree.pack(fill="both", expand=True)
+        tree_frame.pack(fill="both", expand=True)
 
         self._rows: dict[str, sqlite3.Row] = {}
         self.refresh()

@@ -5,13 +5,14 @@ import tkinter as tk
 from tkinter import ttk
 
 from time_tracker import constants
+from time_tracker.ui.reports_tab import ReportsTab
 from time_tracker.ui.saved_nwas_tab import SavedNwasTab
-from time_tracker.ui.settings_reports_tab import SettingsReportsTab
+from time_tracker.ui.settings_tab import SettingsTab
 from time_tracker.ui.work_items_tab import WorkItemsTab
 
 
 class MainWindow(ttk.Frame):
-    """Root frame holding the app's three tabs."""
+    """Root frame holding the app's four tabs."""
 
     def __init__(self, parent: tk.Tk, conn: sqlite3.Connection):
         super().__init__(parent)
@@ -22,16 +23,19 @@ class MainWindow(ttk.Frame):
 
         self.saved_nwas = SavedNwasTab(self.notebook, conn, self.refresh_all)
         self.work_items = WorkItemsTab(self.notebook, conn, self.refresh_all)
-        self.reports = SettingsReportsTab(
+        self.reports = ReportsTab(self.notebook, conn)
+        self.settings = SettingsTab(
             self.notebook, conn, self.refresh_all, on_public_import=self.work_items.on_public_list_imported
         )
 
         self.notebook.add(self.saved_nwas, text=f"Saved {constants.NWA}s")
         self.notebook.add(self.work_items, text=f"{constants.WORK_ITEM}s / Current Work")
-        self.notebook.add(self.reports, text="Settings / Reports")
+        self.notebook.add(self.reports, text="Reports")
+        self.notebook.add(self.settings, text="Settings / Public List")
 
     def refresh_all(self) -> None:
         """Reload data in every tab after a change."""
         self.saved_nwas.refresh()
         self.work_items.refresh()
         self.reports.refresh()
+        self.settings.refresh()
