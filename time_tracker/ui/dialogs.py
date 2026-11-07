@@ -154,7 +154,9 @@ class WorkItemDialog(BaseDialog):
         self.splits.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=8, pady=8)
 
         self.nwa_values = []
+        self._nwa_codes: dict[str, str] = {}
         for row in repository.list_nwas(conn):
+            self._nwa_codes[row["id"]] = row["code"]
             label = f"{row['code']} - {row['name'] or ''}".strip()
             if row["scope"] == "public":
                 label = f"{label} [{constants.PUBLIC.lower()}]"
@@ -195,12 +197,13 @@ class WorkItemDialog(BaseDialog):
             messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
             return
         nwa_id = self._nwa_id_map[self.nwa_combo.get()]
+        values = (self._nwa_codes[nwa_id], basis_points_to_percent(basis_points))
         # An NWA can only appear once per work item: update the existing row instead.
         for item, existing_id in self._split_ids.items():
             if existing_id == nwa_id:
-                self.splits.item(item, values=(self.nwa_combo.get().split(" - ")[0], basis_points_to_percent(basis_points)))
+                self.splits.item(item, values=values)
                 return
-        item = self.splits.insert("", "end", values=(self.nwa_combo.get().split(" - ")[0], basis_points_to_percent(basis_points)))
+        item = self.splits.insert("", "end", values=values)
         self._split_ids[item] = nwa_id
 
     def _remove_split(self) -> None:
