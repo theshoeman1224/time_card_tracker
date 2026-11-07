@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -129,7 +129,7 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
 # Incremental migration steps keyed by the version they upgrade the schema TO.
 # Each step must be idempotent: SCHEMA_SQL runs before the steps on every open,
 # so a freshly created v2 database must tolerate its own steps running again.
-MIGRATION_STEPS: dict[int, callable] = {
+MIGRATION_STEPS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_v2,
 }
 
