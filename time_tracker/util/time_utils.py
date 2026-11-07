@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 
@@ -22,22 +22,40 @@ def parse_iso(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+# Dates shown to (and typed by) the user. Storage stays ISO 8601.
+DATE_FORMAT = "%m-%d-%Y"
+DATETIME_FORMAT = f"{DATE_FORMAT} %H:%M:%S"
+
+
 def parse_local_datetime(value: str) -> datetime:
-    """Parse 'YYYY-MM-DD HH:MM[:SS]' to timezone-aware datetime."""
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+    """Parse 'MM-DD-YYYY HH:MM[:SS]' to timezone-aware datetime."""
+    for fmt in (DATETIME_FORMAT, f"{DATE_FORMAT} %H:%M"):
         try:
             parsed = datetime.strptime(value.strip(), fmt)
             return parsed.astimezone()
         except ValueError:
             continue
-    raise ValueError("Use date/time format YYYY-MM-DD HH:MM[:SS].")
+    raise ValueError("Use date/time format MM-DD-YYYY HH:MM[:SS].")
 
 
 def format_datetime(value: str | None) -> str:
-    """Format ISO string to 'YYYY-MM-DD HH:MM:SS', or empty string if None."""
+    """Format ISO string to 'MM-DD-YYYY HH:MM:SS', or empty string if None."""
     if not value:
         return ""
-    return parse_iso(value).strftime("%Y-%m-%d %H:%M:%S")
+    return parse_iso(value).strftime(DATETIME_FORMAT)
+
+
+def format_date(value: str) -> str:
+    """Format an ISO date ('YYYY-MM-DD') as 'MM-DD-YYYY'."""
+    return date.fromisoformat(value).strftime(DATE_FORMAT)
+
+
+def parse_date(value: str) -> str:
+    """Parse a 'MM-DD-YYYY' date to an ISO date string ('YYYY-MM-DD')."""
+    try:
+        return datetime.strptime(value.strip(), DATE_FORMAT).date().isoformat()
+    except ValueError:
+        raise ValueError("Use date format MM-DD-YYYY.") from None
 
 
 def seconds_between(start_at: str, end_at: str) -> int:

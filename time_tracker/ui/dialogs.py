@@ -285,7 +285,7 @@ class SessionDialog(BaseDialog):
             end_text = self.end.get().strip()
             self._parsed_end = iso(parse_local_datetime(end_text)) if end_text else None
         except ValueError:
-            messagebox.showerror(constants.SESSION, "Use date/time format YYYY-MM-DD HH:MM[:SS].", parent=self)
+            messagebox.showerror(constants.SESSION, "Use date/time format MM-DD-YYYY HH:MM[:SS].", parent=self)
             return False
         if not self.work_item.get():
             messagebox.showerror(constants.SESSION, f"Choose a {constants.WORK_ITEM.lower()}.", parent=self)

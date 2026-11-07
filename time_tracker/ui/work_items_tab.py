@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 from time_tracker import constants
 from time_tracker.services import repository, tracking
 from time_tracker.ui.dialogs import SessionDialog, WorkItemDialog
-from time_tracker.util.time_utils import format_datetime, human_duration
+from time_tracker.util.time_utils import format_date, format_datetime, human_duration
 
 
 class WorkItemsTab(ttk.Frame):
@@ -189,7 +189,7 @@ class WorkItemsTab(ttk.Frame):
             self.active_label.config(text="Not tracking")
             self.elapsed_label.config(text="0:00")
             return
-        self.active_label.config(text=f"Tracking: {active['work_item_name']} ({active['work_date']})")
+        self.active_label.config(text=f"Tracking: {active['work_item_name']} ({format_date(active['work_date'])})")
         self.elapsed_label.config(text=human_duration(tracking.session_seconds(active)))
 
     def _tick(self) -> None:

@@ -3,14 +3,13 @@ from __future__ import annotations
 import logging
 import sqlite3
 import tkinter as tk
-from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from time_tracker import constants
 from time_tracker.paths import database_path, log_path
 from time_tracker.services import exports, public_list, reports, repository, tracking
-from time_tracker.util.time_utils import now_local
+from time_tracker.util.time_utils import DATE_FORMAT, now_local, parse_date
 
 
 class SettingsReportsTab(ttk.Frame):
@@ -62,7 +61,7 @@ class SettingsReportsTab(ttk.Frame):
         ttk.Label(controls, text="Anchor Date").pack(side="left", padx=(14, 4))
         self.anchor = ttk.Entry(controls, width=14)
         self.anchor.pack(side="left", padx=4)
-        self.anchor.insert(0, now_local().date().isoformat())
+        self.anchor.insert(0, now_local().strftime(DATE_FORMAT))
         ttk.Button(controls, text="Generate", command=self.generate).pack(side="left", padx=8)
         ttk.Button(controls, text="Copy NWA Values", command=self.copy_nwa_values).pack(side="right", padx=(6, 10))
         ttk.Button(controls, text="Export CSV", command=self.export_csv).pack(side="right", padx=(6, 10))
@@ -166,8 +165,8 @@ class SettingsReportsTab(ttk.Frame):
 
     def generate(self) -> None:
         try:
-            datetime.strptime(self.anchor.get().strip(), "%Y-%m-%d")
-            self.current_report = reports.generate_report(self.conn, self.period.get(), self.anchor.get().strip())
+            anchor_date = parse_date(self.anchor.get())
+            self.current_report = reports.generate_report(self.conn, self.period.get(), anchor_date)
         except ValueError as exc:
             messagebox.showerror("Report", str(exc), parent=self)
             return
