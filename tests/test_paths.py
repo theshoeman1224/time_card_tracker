@@ -91,7 +91,9 @@ class EnsureAppDirsTests(unittest.TestCase):
 
     def test_is_safe_to_call_twice(self):
         with platform("linux"), self._env():
-            self.assertEqual(paths.ensure_app_dirs(), paths.ensure_app_dirs())
+            first = paths.ensure_app_dirs()
+            second = paths.ensure_app_dirs()
+            self.assertEqual(first, second)
 
     def test_database_and_log_paths(self):
         with platform("linux"), self._env():
