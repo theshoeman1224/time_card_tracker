@@ -8,7 +8,7 @@ Domain glossary for the time card tracker. Terms are added as the domain model s
 - **Public list** — the team-shared catalog of NWAs and work items supplied by a team lead or manager. Only one public list is active at a time; importing a new one replaces it. See ADR-0002.
 - **Obsolete** — dropped by a newer public list. Distinct from *deleted* (removed by the user): obsolete rows stay readable so stale splits and history still resolve, and the UI can show why something vanished.
 - **Stale** — a work item split that points at an obsolete public NWA. Shown in red; fixed by editing the task to relink its splits.
-- **Work item** — a reusable task template with one or more **NWA splits** (basis-point percentages that must total 100%).
+- **Work item** — a reusable task template with one or more **NWA splits** (basis-point percentages, entered with at most two decimal places, that must total 100%).
 - **Split snapshot** — a frozen JSON copy of a work item's splits taken when a session starts (or when its work item changes), so historical sessions are charged by the splits in force at the time.
 - **Work day** — the calendar day a session *starts* on; sessions that span midnight belong to the starting day.
 - **Rounded hours** — a time rounded to the rounding increment (setting, in minutes) and shown as decimal hours: one decimal place when the increment is a multiple of 6 minutes (exact tenths), otherwise two (15 minutes = 0.25). Rounding applies per work item per work day; weekly and monthly reports sum the daily rounded values, so they always match the daily reports they cover.

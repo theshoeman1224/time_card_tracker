@@ -2,7 +2,11 @@ from __future__ import annotations
 
 
 def parse_percent_to_basis_points(value: str) -> int:
-    """Parse a percent string to basis points (70% = 7000). Raises ValueError on invalid input."""
+    """Parse a percent string to basis points (70% = 7000). Raises ValueError on invalid input.
+
+    Basis points hold two decimal places, so "33.339" is rejected rather than
+    silently cut to 33.33%. Trailing zeros ("33.330") are fine.
+    """
     text = value.strip().replace("%", "")
     if not text:
         raise ValueError("Percent is required.")
@@ -10,7 +14,10 @@ def parse_percent_to_basis_points(value: str) -> int:
     if len(parts) > 2 or any(not part.isdigit() for part in parts if part):
         raise ValueError("Percent must be a number.")
     whole = int(parts[0] or "0")
-    frac = (parts[1] if len(parts) == 2 else "")[:2].ljust(2, "0")
+    decimals = parts[1] if len(parts) == 2 else ""
+    if decimals[2:].strip("0"):
+        raise ValueError("Percent can have at most two decimal places, like 33.33.")
+    frac = decimals[:2].ljust(2, "0")
     basis_points = whole * 100 + int(frac or "0")
     if basis_points <= 0 or basis_points > 10000:
         raise ValueError("Percent must be greater than 0 and no more than 100.")
