@@ -86,16 +86,18 @@ class ExportEscapingTests(unittest.TestCase):
         self.assertEqual(rows[1], [constants.WORK_ITEM, name, "1:00:00", "1.0"])
         self.assertEqual(len(rows), 3)
 
-    @unittest.expectedFailure  # Bug: export_markdown doesn't escape pipes, which split the cell.
     def test_markdown_escapes_pipes_in_names(self):
         content = self._markdown("Design | Build")
         self.assertIn("| Design \\| Build |", content)
 
-    @unittest.expectedFailure  # Bug: a newline in a name breaks the table row in two.
     def test_markdown_keeps_multiline_names_on_one_row(self):
         content = self._markdown("line one\nline two")
         self.assertNotIn("line one\nline two", content)
-        self.assertIn("line two", content)
+        self.assertIn("| line one line two |", content)
+
+    def test_markdown_escapes_backslashes_before_pipes(self):
+        content = self._markdown("C:\\temp")
+        self.assertIn("| C:\\\\temp |", content)
 
 
 if __name__ == "__main__":
