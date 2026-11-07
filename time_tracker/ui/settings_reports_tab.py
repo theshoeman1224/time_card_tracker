@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 import tkinter as tk
 from datetime import datetime
@@ -108,6 +109,14 @@ class SettingsReportsTab(ttk.Frame):
             report = public_list.import_public_list(self.conn, Path(path))
         except ValueError as exc:
             messagebox.showerror("Public List", str(exc), parent=self)
+            return
+        except sqlite3.Error as exc:
+            logging.exception("Public list import failed")
+            messagebox.showerror(
+                "Public List",
+                f"The public list couldn't be saved, so nothing was changed:\n{exc}",
+                parent=self,
+            )
             return
         if self.on_public_import:
             self.on_public_import(report)
