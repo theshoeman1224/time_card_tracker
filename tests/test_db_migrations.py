@@ -2,6 +2,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from time_tracker import db
 from time_tracker.services import repository
@@ -89,6 +90,40 @@ class MigrationTests(unittest.TestCase):
         db.migrate(conn)
         row = conn.execute("SELECT value FROM settings WHERE key = 'allow_public_edits'").fetchone()
         self.assertEqual(row["value"], "0")
+
+    def test_latest_step_matches_schema_version(self):
+        self.assertEqual(max(db.MIGRATION_STEPS), db.SCHEMA_VERSION)
+
+    def test_new_database_records_steps_without_running_them(self):
+        calls = []
+        with mock.patch.dict(db.MIGRATION_STEPS, {2: lambda conn: calls.append(2)}):
+            conn = memory_conn()
+        self.assertEqual(calls, [])
+        versions = [row["version"] for row in conn.execute("SELECT version FROM schema_migrations")]
+        self.assertEqual(versions, [db.SCHEMA_VERSION])
+
+    def test_upgrade_runs_and_records_each_step_in_order(self):
+        calls = []
+        steps = {2: lambda conn: calls.append(2), 3: lambda conn: calls.append(3)}
+        conn = make_v1_conn()
+        with mock.patch.dict(db.MIGRATION_STEPS, steps, clear=True), mock.patch.object(db, "SCHEMA_VERSION", 3):
+            db.migrate(conn)
+            db.migrate(conn)
+        self.assertEqual(calls, [2, 3])
+        versions = [row["version"] for row in conn.execute("SELECT version FROM schema_migrations ORDER BY version")]
+        self.assertEqual(versions, [1, 2, 3])
+
+    def test_failed_step_is_not_recorded_and_earlier_steps_stay(self):
+        def fail(conn):
+            raise RuntimeError("step 3 failed")
+
+        conn = make_v1_conn()
+        with mock.patch.dict(db.MIGRATION_STEPS, {3: fail}), mock.patch.object(db, "SCHEMA_VERSION", 3):
+            with self.assertRaises(RuntimeError):
+                db.migrate(conn)
+        versions = [row["version"] for row in conn.execute("SELECT version FROM schema_migrations ORDER BY version")]
+        self.assertEqual(versions, [1, 2])
+        self.assertIn("scope", db._table_columns(conn, "nwas"))
 
     def test_migrate_is_idempotent(self):
         conn = make_v1_conn()
