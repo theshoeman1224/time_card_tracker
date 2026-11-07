@@ -146,9 +146,11 @@ def _validate_session_update(
     start_at: str,
     end_at: str | None,
 ) -> sqlite3.Row:
-    """Check the session exists and its new times don't overlap other sessions in the same work day.
+    """Check the session exists and its new times don't overlap any other session.
 
-    Open-ended sessions are compared as if they end now. Returns the session row.
+    Overlaps are checked across all days, since an edit can move a session to
+    another date. Open-ended sessions are compared as if they end now. Returns
+    the session row.
     """
     session = conn.execute("SELECT * FROM time_sessions WHERE id = ?", (session_id,)).fetchone()
     if not session:
@@ -167,14 +169,14 @@ def _validate_session_update(
     overlap = conn.execute(
         """
         SELECT id FROM time_sessions
-        WHERE work_day_id = ? AND id <> ?
+        WHERE id <> ?
           AND start_at < ? AND COALESCE(end_at, ?) > ?
         LIMIT 1
         """,
-        (session["work_day_id"], session_id, overlap_end_at, now_text, start_at),
+        (session_id, overlap_end_at, now_text, start_at),
     ).fetchone()
     if overlap:
-        raise ValueError("Edited session overlaps another session in the same work day.")
+        raise ValueError("Edited session overlaps another session.")
     return session
 
 
@@ -189,11 +191,12 @@ def update_session(
     """Update a session's times, work item, and note. Validates no overlaps.
 
     Re-snapshots the splits if the work item changed, so the session is charged
-    by the item's current splits. Commits on success; rolls back and re-raises
-    on failure.
+    by the item's current splits. Re-files the session under the work day of its
+    new start time. Commits on success; rolls back and re-raises on failure.
     """
     with transaction(conn):
         session = _validate_session_update(conn, session_id, start_at, end_at)
+        work_day_id = get_or_create_work_day(conn, parse_iso(start_at))
         now_text = iso(now_local())
         snapshot = session["split_snapshot_json"]
         if work_item_id != session["work_item_id"]:
@@ -201,9 +204,9 @@ def update_session(
         conn.execute(
             """
             UPDATE time_sessions
-            SET start_at = ?, end_at = ?, work_item_id = ?, split_snapshot_json = ?,
+            SET work_day_id = ?, start_at = ?, end_at = ?, work_item_id = ?, split_snapshot_json = ?,
                 note = ?, edited_at = ?, updated_at = ?
             WHERE id = ?
             """,
-            (start_at, end_at, work_item_id, snapshot, note.strip(), now_text, now_text, session_id),
+            (work_day_id, start_at, end_at, work_item_id, snapshot, note.strip(), now_text, now_text, session_id),
         )

@@ -204,13 +204,22 @@ class UpdateSessionInvariantTests(unittest.TestCase):
                 self.conn, self.closed, "2026-07-02T09:00:00-04:00", "2026-07-02T11:00:00-04:00", self.work_item
             )
 
-    @unittest.expectedFailure  # Bug: work_day_id is never re-derived from the new start time.
     def test_moving_a_session_to_another_date_moves_its_work_day(self):
         tracking.update_session(
             self.conn, self.closed, "2026-07-05T09:00:00-04:00", "2026-07-05T10:00:00-04:00", self.work_item
         )
 
         self.assertEqual(session_work_date(self.conn, self.closed), "2026-07-05")
+
+    def test_overlap_is_checked_on_the_destination_day(self):
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-07-05T09:00:00-04:00"))
+        tracking.pause(self.conn, at("2026-07-05T10:00:00-04:00"))
+
+        with self.assertRaises(ValueError):
+            tracking.update_session(
+                self.conn, self.closed, "2026-07-05T09:30:00-04:00", "2026-07-05T10:30:00-04:00", self.work_item
+            )
+        self.assertEqual(session_work_date(self.conn, self.closed), "2026-07-02")
 
     def test_changing_work_item_resnapshots_splits(self):
         other = repository.save_work_item(self.conn, "Other", "", [(self.nwa_a, 10000)])
