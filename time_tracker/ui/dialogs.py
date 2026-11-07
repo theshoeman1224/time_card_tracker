@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 from time_tracker import constants
 from time_tracker.services import repository
 from time_tracker.services.validation import basis_points_to_percent, parse_percent_to_basis_points
+from time_tracker.ui import theme
 from time_tracker.ui.widgets import scrolled_tree
 from time_tracker.util.time_utils import format_datetime, iso, parse_local_datetime
 
@@ -168,7 +169,7 @@ class WorkItemDialog(BaseDialog):
         self.splits.heading("percent", text="Percent")
         self.splits.column("nwa", width=420)
         self.splits.column("percent", width=100, anchor="e")
-        self.splits.tag_configure("stale", foreground="red")
+        theme.danger_tag(self.splits, "stale")
         splits_frame.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=8, pady=8)
 
         self.nwa_values = []

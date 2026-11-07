@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 from time_tracker import constants
 from time_tracker.paths import database_path, log_path
 from time_tracker.services import public_list, repository, tracking
+from time_tracker.ui import theme
 from time_tracker.ui.dialogs import ask_save_path, show_save_error
 
 
@@ -34,8 +35,14 @@ class SettingsTab(ttk.Frame):
         self.rounding.grid(row=0, column=1, sticky="w", padx=8, pady=8)
         ttk.Button(settings, text="Save Settings", command=self.save_settings).grid(row=0, column=2, padx=8, pady=8)
         ttk.Button(settings, text="Reset Day", command=self.reset_day).grid(row=0, column=3, padx=8, pady=8)
-        ttk.Label(settings, text=f"Database: {database_path()}").grid(row=1, column=0, columnspan=4, sticky="w", padx=10)
-        ttk.Label(settings, text=f"Log: {log_path()}").grid(row=2, column=0, columnspan=4, sticky="w", padx=10, pady=(0, 8))
+        self.dark_mode = tk.BooleanVar(
+            value=repository.get_setting(self.conn, theme.THEME_SETTING, theme.LIGHT) == theme.DARK
+        )
+        ttk.Checkbutton(settings, text="Dark mode", variable=self.dark_mode, command=self.save_theme).grid(
+            row=0, column=4, padx=8, pady=8
+        )
+        ttk.Label(settings, text=f"Database: {database_path()}").grid(row=1, column=0, columnspan=5, sticky="w", padx=10)
+        ttk.Label(settings, text=f"Log: {log_path()}").grid(row=2, column=0, columnspan=5, sticky="w", padx=10, pady=(0, 8))
 
         public = ttk.LabelFrame(self, text="Public List")
         public.pack(fill="x", pady=(0, 10))
@@ -63,6 +70,11 @@ class SettingsTab(ttk.Frame):
     def save_public_edits(self) -> None:
         repository.set_setting(self.conn, "allow_public_edits", "1" if self.public_edits.get() else "0")
         self.on_change()
+
+    def save_theme(self) -> None:
+        name = theme.DARK if self.dark_mode.get() else theme.LIGHT
+        repository.set_setting(self.conn, theme.THEME_SETTING, name)
+        theme.apply_theme(self.winfo_toplevel(), name)
 
     def import_public_list(self) -> None:
         path = filedialog.askopenfilename(

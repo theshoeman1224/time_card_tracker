@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from time_tracker import constants
 from time_tracker.services import repository, tracking
 from time_tracker.ui.dialogs import SessionDialog, WorkItemDialog
+from time_tracker.ui import theme
 from time_tracker.ui.widgets import scrolled_tree
 from time_tracker.util.time_utils import format_date, format_datetime, human_duration
 
@@ -52,7 +53,7 @@ class WorkItemsTab(ttk.Frame):
         ttk.Button(item_toolbar, text="↑", width=2, command=lambda: self.move_work_item(-1)).pack(side="right", padx=(6, 0))
         ttk.Button(item_toolbar, text="↓", width=2, command=lambda: self.move_work_item(1)).pack(side="right")
 
-        self.alert_label = ttk.Label(left, text="", foreground="red", wraplength=420, justify="left")
+        self.alert_label = ttk.Label(left, text="", style="Danger.TLabel", wraplength=420, justify="left")
 
         self._items_frame, self.items = scrolled_tree(
             left, columns=("name", "splits", "scope"), show="headings", selectmode="browse"
@@ -63,7 +64,7 @@ class WorkItemsTab(ttk.Frame):
         self.items.column("name", width=200)
         self.items.column("splits", width=240)
         self.items.column("scope", width=80, anchor="center")
-        self.items.tag_configure("stale", foreground="red")
+        theme.danger_tag(self.items, "stale")
         self._items_frame.pack(fill="both", expand=True)
         self.items.bind("<Double-1>", lambda _event: self.start_selected())
         self.items.bind("<Return>", lambda _event: self.start_selected())
