@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import sqlite3
 import tkinter as tk
-from tkinter import messagebox, ttk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
 from time_tracker import constants
 from time_tracker.services import repository
 from time_tracker.services.validation import basis_points_to_percent, parse_percent_to_basis_points
+from time_tracker.ui.widgets import scrolled_tree
 from time_tracker.util.time_utils import format_datetime, iso, parse_local_datetime
 
 
@@ -22,6 +24,22 @@ def unique_choices(choices: list[tuple[str, str]]) -> list[tuple[str, str]]:
         seen[label] = seen.get(label, 0) + 1
         result.append((label if seen[label] == 1 else f"{label} ({seen[label]})", choice_id))
     return result
+
+
+def ask_save_path(parent: tk.Widget, suffix: str) -> Path | None:
+    """Ask where to save a file with the given suffix; None if the user cancels."""
+    path = filedialog.asksaveasfilename(
+        parent=parent,
+        defaultextension=suffix,
+        filetypes=[(suffix.upper().strip("."), f"*{suffix}"), ("All files", "*.*")],
+    )
+    return Path(path) if path else None
+
+
+def show_save_error(parent: tk.Widget, title: str, path: Path, exc: OSError) -> None:
+    """Tell the user a file couldn't be written (locked, read-only, missing folder)."""
+    reason = exc.strerror or str(exc)
+    messagebox.showerror(title, f"Could not save {path}:\n{reason}", parent=parent)
 
 
 def work_item_choices(rows) -> list[tuple[str, str]]:
@@ -145,13 +163,13 @@ class WorkItemDialog(BaseDialog):
         split_frame.grid_columnconfigure(0, weight=1)
         split_frame.grid_rowconfigure(0, weight=1)
 
-        self.splits = ttk.Treeview(split_frame, columns=("nwa", "percent"), show="headings", height=8)
+        splits_frame, self.splits = scrolled_tree(split_frame, columns=("nwa", "percent"), show="headings", height=8)
         self.splits.heading("nwa", text=constants.NWA)
         self.splits.heading("percent", text="Percent")
         self.splits.column("nwa", width=420)
         self.splits.column("percent", width=100, anchor="e")
         self.splits.tag_configure("stale", foreground="red")
-        self.splits.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=8, pady=8)
+        splits_frame.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=8, pady=8)
 
         self.nwa_values = []
         self._nwa_codes: dict[str, str] = {}

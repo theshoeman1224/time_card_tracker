@@ -68,6 +68,31 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["dates"], ["2026-01-01"])
         self.assertEqual(report["work_items"], [])
         self.assertEqual(report["nwas"], [])
+        zero = {"raw_seconds": 0, "raw": "0:00:00", "rounded_seconds": 0, "rounded": "0.00"}
+        self.assertEqual(report["work_item_total"], zero)
+        self.assertEqual(report["nwa_total"], zero)
+
+    def test_weekly_report_with_no_work_days_has_zero_totals(self):
+        report = reports.generate_report(self.conn, "weekly", "2026-01-01")
+        self.assertEqual(report["dates"], [])
+        self.assertEqual(report["work_item_total"]["rounded"], "0.00")
+        self.assertEqual(report["nwa_total"]["raw"], "0:00:00")
+
+    def test_totals_sum_each_table(self):
+        other = repository.save_work_item(self.conn, "Other", "", [(self.nwa_b, 10000)])
+        tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
+        tracking.start_or_switch(self.conn, other, datetime.fromisoformat("2026-07-02T10:00:00-04:00"))
+        tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T10:20:00-04:00"))
+
+        report = reports.generate_report(self.conn, "daily", "2026-07-02")
+        for key, rows in (("work_item_total", report["work_items"]), ("nwa_total", report["nwas"])):
+            total = report[key]
+            self.assertEqual(total["raw_seconds"], sum(row["raw_seconds"] for row in rows))
+            self.assertEqual(total["rounded_seconds"], sum(row["rounded_seconds"] for row in rows))
+        # 1:00 rounds to 1.00 and 0:20 rounds to 0.25 at the default 15-minute increment.
+        self.assertEqual(report["work_item_total"]["raw"], "1:20:00")
+        self.assertEqual(report["work_item_total"]["rounded"], "1.25")
+        self.assertEqual(report["nwa_total"]["rounded"], "1.25")
 
     def test_unknown_period_raises(self):
         with self.assertRaises(ValueError) as ctx:

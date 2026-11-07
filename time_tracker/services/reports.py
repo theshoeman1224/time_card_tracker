@@ -52,9 +52,21 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
     so later edits to a work item's splits don't change how past sessions are
     charged.
     """
+    increment = int(repository.get_setting(conn, "rounding_increment_minutes", "15"))
+    mode = repository.get_setting(conn, "rounding_mode", "nearest")
+    places = hour_places(increment)
+
     dates = report_dates(conn, period, anchor_date)
     if not dates:
-        return {"period": period, "anchor_date": anchor_date, "dates": [], "work_items": [], "nwas": []}
+        return {
+            "period": period,
+            "anchor_date": anchor_date,
+            "dates": [],
+            "work_items": [],
+            "nwas": [],
+            "work_item_total": _total([], places),
+            "nwa_total": _total([], places),
+        }
     placeholders = ",".join("?" for _ in dates)
     rows = list(
         conn.execute(
@@ -83,10 +95,6 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
             day_item_parts[day_key][(split["nwa_id"], split["code"])] += (
                 seconds * split["percent_basis_points"] / 10000
             )
-
-    increment = int(repository.get_setting(conn, "rounding_increment_minutes", "15"))
-    mode = repository.get_setting(conn, "rounding_mode", "nearest")
-    places = hour_places(increment)
 
     # Round each work item's day, then charge that rounded time across its NWAs
     # (largest remainder), so NWA rounded times always sum to the work item
@@ -145,4 +153,18 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
         "dates": dates,
         "work_items": work_item_rows,
         "nwas": nwa_rows,
+        "work_item_total": _total(work_item_rows, places),
+        "nwa_total": _total(nwa_rows, places),
+    }
+
+
+def _total(rows: list[dict[str, object]], places: int) -> dict[str, object]:
+    """Sum a report table's raw and rounded time into a totals row."""
+    raw_seconds = sum(row["raw_seconds"] for row in rows)
+    rounded_seconds = sum(row["rounded_seconds"] for row in rows)
+    return {
+        "raw_seconds": raw_seconds,
+        "raw": human_duration(raw_seconds),
+        "rounded_seconds": rounded_seconds,
+        "rounded": decimal_hours(rounded_seconds, places),
     }
