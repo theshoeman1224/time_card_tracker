@@ -4,8 +4,11 @@ from time_tracker.util.time_utils import (
     apportion,
     apportion_rounded,
     decimal_hours,
+    format_date,
+    format_datetime,
     hour_places,
     human_duration,
+    parse_date,
     parse_local_datetime,
     round_seconds,
     seconds_between,
@@ -140,17 +143,35 @@ class SecondsBetweenTests(unittest.TestCase):
 
 class ParseLocalDatetimeTests(unittest.TestCase):
     def test_with_seconds(self):
-        result = parse_local_datetime("2026-07-02 09:00:00")
+        result = parse_local_datetime("07-02-2026 09:00:00")
         self.assertEqual(result.hour, 9)
 
     def test_without_seconds(self):
-        result = parse_local_datetime("2026-07-02 09:00")
+        result = parse_local_datetime("07-02-2026 09:00")
         self.assertEqual(result.hour, 9)
 
     def test_invalid_format_raises(self):
         with self.assertRaises(ValueError) as ctx:
-            parse_local_datetime("07/02/2026 09:00")
-        self.assertIn("YYYY-MM-DD", str(ctx.exception))
+            parse_local_datetime("2026-07-02 09:00")
+        self.assertIn("MM-DD-YYYY", str(ctx.exception))
+
+
+class DisplayDateTests(unittest.TestCase):
+    def test_format_date(self):
+        self.assertEqual(format_date("2026-07-02"), "07-02-2026")
+
+    def test_parse_date_returns_iso(self):
+        self.assertEqual(parse_date(" 07-02-2026 "), "2026-07-02")
+
+    def test_parse_date_rejects_iso(self):
+        with self.assertRaises(ValueError) as ctx:
+            parse_date("2026-07-02")
+        self.assertIn("MM-DD-YYYY", str(ctx.exception))
+
+    def test_format_datetime_round_trips(self):
+        shown = format_datetime("2026-07-02T09:05:30-04:00")
+        self.assertEqual(shown, "07-02-2026 09:05:30")
+        self.assertEqual(parse_local_datetime(shown).strftime("%H:%M:%S"), "09:05:30")
 
 
 class WeekBoundsTests(unittest.TestCase):

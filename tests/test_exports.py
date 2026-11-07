@@ -43,6 +43,7 @@ class ExportTests(unittest.TestCase):
             self.assertIn("| Review |", content)
             self.assertIn("| A |", content)
             self.assertIn("| B |", content)
+            self.assertIn("# Time Report: Daily 07-02-2026", content)
 
     def test_csv_export_empty_report(self):
         report = {

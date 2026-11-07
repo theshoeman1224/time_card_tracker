@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 
 from time_tracker import constants
+from time_tracker.util.time_utils import format_date
 
 
 def _md_cell(value: object) -> str:
@@ -26,7 +27,7 @@ def export_csv(report: dict[str, object], path: Path) -> None:
 def export_markdown(report: dict[str, object], path: Path) -> None:
     """Write a report as Markdown with one table per section."""
     lines = [
-        f"# Time Report: {report['period'].title()} {report['anchor_date']}",
+        f"# Time Report: {report['period'].title()} {format_date(report['anchor_date'])}",
         "",
         f"## {constants.WORK_ITEM}s",
         "",
