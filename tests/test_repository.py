@@ -29,7 +29,6 @@ class NwaTests(unittest.TestCase):
 
         self.assertEqual([row["code"] for row in repository.list_nwas(conn, query="alpha")], ["X"])
 
-    @unittest.expectedFailure  # Bug: the search filters the tag join, so the row shows only matching tags.
     def test_search_by_tag_returns_all_of_the_nwas_tags(self):
         conn = memory_conn()
         repository.save_nwa(conn, "X", "NWA X", tags="alpha, beta")

@@ -40,7 +40,13 @@ def list_nwas(
         sql += " AND n.scope = ?"
         params.append(scope)
     if query.strip():
-        sql += " AND (n.code LIKE ? OR n.name LIKE ? OR t.name LIKE ?)"
+        # Match tags with EXISTS rather than on the joined tag row: filtering the join
+        # would drop the non-matching tags from the row's GROUP_CONCAT.
+        sql += """
+          AND (n.code LIKE ? OR n.name LIKE ? OR EXISTS (
+                SELECT 1 FROM nwa_tags snt JOIN tags st ON st.id = snt.tag_id
+                WHERE snt.nwa_id = n.id AND st.name LIKE ?))
+        """
         needle = f"%{query.strip()}%"
         params.extend([needle, needle, needle])
     sql += " GROUP BY n.id ORDER BY n.code"
