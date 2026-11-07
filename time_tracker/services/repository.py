@@ -312,6 +312,8 @@ def move_work_item(conn: sqlite3.Connection, work_item_id: str, delta: int) -> N
     """
     with transaction(conn):
         rows = [row["id"] for row in list_work_items(conn)]
+        if work_item_id not in rows:
+            raise ValueError("That work item no longer exists.")
         index = rows.index(work_item_id)
         new_index = index + delta
         if not 0 <= new_index < len(rows):
