@@ -20,6 +20,17 @@ class ParsePercentTests(unittest.TestCase):
     def test_exactly_100(self):
         self.assertEqual(parse_percent_to_basis_points("100"), 10000)
 
+    def test_two_decimals(self):
+        self.assertEqual(parse_percent_to_basis_points("33.33"), 3333)
+
+    def test_more_than_two_decimals_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            parse_percent_to_basis_points("33.339")
+        self.assertIn("two decimal places", str(ctx.exception))
+
+    def test_trailing_zeros_past_two_decimals_are_allowed(self):
+        self.assertEqual(parse_percent_to_basis_points("33.3300"), 3333)
+
     def test_empty_raises(self):
         with self.assertRaises(ValueError) as ctx:
             parse_percent_to_basis_points("")

@@ -21,6 +21,19 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(by_code["A"]["raw_seconds"], 2520)
         self.assertEqual(by_code["B"]["raw_seconds"], 1080)
 
+    def test_raw_nwa_seconds_sum_to_raw_work_item_seconds(self):
+        nwa_c = repository.save_nwa(self.conn, "C", "NWA C")
+        thirds = repository.save_work_item(
+            self.conn, "Thirds", "", [(self.nwa_a, 3333), (self.nwa_b, 3333), (nwa_c, 3334)]
+        )
+        tracking.start_or_switch(self.conn, thirds, datetime.fromisoformat("2026-07-02T09:00:00-04:00"))
+        tracking.pause(self.conn, datetime.fromisoformat("2026-07-02T09:01:40-04:00"))
+
+        report = reports.generate_report(self.conn, "daily", "2026-07-02")
+        # 100s at 33.33/33.33/33.34% truncates to 33+33+33 = 99s; apportioning keeps all 100.
+        self.assertEqual(sum(row["raw_seconds"] for row in report["nwas"]), 100)
+        self.assertEqual(report["work_items"][0]["raw_seconds"], 100)
+
     def test_weekly_report_uses_work_dates(self):
         tracking.start_or_switch(self.conn, self.work_item, datetime.fromisoformat("2026-07-05T23:00:00-04:00"))
         tracking.pause(self.conn, datetime.fromisoformat("2026-07-06T01:00:00-04:00"))

@@ -142,6 +142,48 @@ class StaleWorkItemTests(unittest.TestCase):
         repository.remove_work_item(conn, item)
         self.assertEqual(repository.stale_work_item_ids(conn), set())
 
+    def test_split_on_removed_personal_nwa_is_stale(self):
+        conn = memory_conn()
+        nwa_a, nwa_b, item = seed_basic(conn)
+        repository.remove_nwa(conn, nwa_b)
+
+        self.assertEqual(repository.stale_work_item_ids(conn), {item})
+        rows = repository.list_stale_work_items(conn)
+        self.assertEqual([(row["nwa_code"], row["nwa_deleted"]) for row in rows], [("B", 1)])
+
+    def test_re_adding_a_removed_code_clears_stale(self):
+        conn = memory_conn()
+        _, nwa_b, _ = seed_basic(conn)
+        repository.remove_nwa(conn, nwa_b)
+        repository.save_nwa(conn, "B", "NWA B")
+        self.assertEqual(repository.stale_work_item_ids(conn), set())
+
+    def test_import_report_leaves_out_splits_on_removed_personal_nwas(self):
+        conn = memory_conn()
+        _, nwa_b, _ = seed_basic(conn)
+        repository.remove_nwa(conn, nwa_b)
+
+        report = public_list.import_public_list(conn, write_list_file(nwas=[{"code": "PUB-A"}], work_items=[]))
+
+        self.assertEqual(report["stale"], [])
+
+    def test_export_with_public_item_on_removed_public_nwa_raises(self):
+        conn = memory_conn()
+        public_list.import_public_list(
+            conn,
+            write_list_file(
+                nwas=[{"code": "PUB-A"}],
+                work_items=[{"name": "Review", "splits": [{"code": "PUB-A", "percent_basis_points": 10000}]}],
+            ),
+        )
+        nwa_id = conn.execute("SELECT id FROM nwas WHERE code = 'PUB-A'").fetchone()["id"]
+        repository.remove_nwa(conn, nwa_id)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError) as ctx:
+                public_list.export_public_list(conn, Path(tmp) / "out.json")
+        self.assertIn("PUB-A", str(ctx.exception))
+
     def test_healthy_items_are_not_stale(self):
         conn = memory_conn()
         public_nwa = seed_public_nwa(conn)

@@ -1,6 +1,7 @@
 import unittest
 
 from time_tracker.util.time_utils import (
+    apportion,
     apportion_rounded,
     decimal_hours,
     hour_places,
@@ -40,6 +41,15 @@ class RoundSecondsTests(unittest.TestCase):
 
     def test_negative_increment_uses_one(self):
         self.assertEqual(round_seconds(60, -1), 60)
+
+
+class ApportionTests(unittest.TestCase):
+    def test_whole_seconds_sum_to_total(self):
+        # A third each of 100s floors to 33s apiece; the leftover second goes to the first part.
+        self.assertEqual(apportion(100, [100 / 3, 100 / 3, 100 / 3]), [34, 33, 33])
+
+    def test_unit_seconds_splits_in_whole_units(self):
+        self.assertEqual(apportion(1080, [481.5, 481.5, 243.0], 360), [360, 360, 360])
 
 
 class ApportionRoundedTests(unittest.TestCase):

@@ -40,15 +40,15 @@ def export_public_list(conn: sqlite3.Connection, path: Path | str) -> dict[str, 
     """Write the active public NWA and work item lists to a JSON file.
 
     Returns a summary with nwa_count and work_item_count. Raises ValueError if a
-    public work item still references an obsolete public NWA, since such a file
+    public work item still references a removed or obsolete NWA, since such a file
     could never be imported (it would not be self-contained).
     """
     stale = [row for row in repository.list_stale_work_items(conn) if row["work_item_scope"] == "public"]
     if stale:
         codes = sorted({row["nwa_code"] for row in stale})
         raise ValueError(
-            "Cannot export: public work items still reference charge codes dropped "
-            f"from the public list ({', '.join(codes)}). Edit the work items to relink "
+            "Cannot export: public work items still reference charge codes that were "
+            f"removed or dropped from the public list ({', '.join(codes)}). Edit the work items to relink "
             "their splits, then export again."
         )
 
@@ -208,6 +208,8 @@ def import_public_list(conn: sqlite3.Connection, path: Path | str) -> dict[str, 
                     "nwa_code": row["nwa_code"],
                 }
                 for row in repository.list_stale_work_items(conn)
+                # Only splits this import left behind; removed NWAs aren't its doing.
+                if not row["nwa_deleted"]
             ],
         }
     return report

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -127,9 +127,12 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
 
 
 # Incremental migration steps keyed by the version they upgrade the schema TO.
-# Each step must be idempotent: SCHEMA_SQL runs before the steps on every open,
-# so a freshly created v2 database must tolerate its own steps running again.
-MIGRATION_STEPS: dict[int, callable] = {
+# migrate() runs each step once, on databases created before that version, and
+# records it in schema_migrations in the same transaction. A new database is
+# built at the current version by SCHEMA_SQL, so its steps are recorded without
+# running. SCHEMA_SQL still runs first on every open, so it may only use
+# CREATE ... IF NOT EXISTS on tables and columns an older database already has.
+MIGRATION_STEPS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _migrate_v2,
 }
 
@@ -144,17 +147,24 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """Create tables if missing, run unapplied migration steps, and seed default settings."""
+    """Create tables if missing, run unapplied migration steps, and seed default settings.
+
+    Each step and the schema_migrations row recording it commit together, so a
+    failed step leaves no record and runs again on the next open.
+    """
+    is_new = conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'nwas'").fetchone() is None
     conn.executescript(SCHEMA_SQL)
     applied = {row["version"] for row in conn.execute("SELECT version FROM schema_migrations")}
-    for version, step in sorted(MIGRATION_STEPS.items()):
-        if version not in applied:
-            step(conn)
-    if SCHEMA_VERSION not in applied:
-        conn.execute(
-            "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
-            (SCHEMA_VERSION, iso(now_local())),
-        )
+    versions = set(MIGRATION_STEPS) | {SCHEMA_VERSION}
+    for version in sorted(versions - applied):
+        with transaction(conn):
+            step = MIGRATION_STEPS.get(version)
+            if step and not is_new:
+                step(conn)
+            conn.execute(
+                "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                (version, iso(now_local())),
+            )
     for key, value in DEFAULT_SETTINGS.items():
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (key, value))
     conn.commit()

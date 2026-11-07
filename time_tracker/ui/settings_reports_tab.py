@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 import tkinter as tk
 from datetime import datetime
@@ -109,6 +110,14 @@ class SettingsReportsTab(ttk.Frame):
         except ValueError as exc:
             messagebox.showerror("Public List", str(exc), parent=self)
             return
+        except sqlite3.Error as exc:
+            logging.exception("Public list import failed")
+            messagebox.showerror(
+                "Public List",
+                f"The public list couldn't be saved, so nothing was changed:\n{exc}",
+                parent=self,
+            )
+            return
         if self.on_public_import:
             self.on_public_import(report)
         self.on_change()
@@ -139,6 +148,9 @@ class SettingsReportsTab(ttk.Frame):
             summary = public_list.export_public_list(self.conn, path)
         except ValueError as exc:
             messagebox.showerror("Public List", str(exc), parent=self)
+            return
+        except OSError as exc:
+            self._show_save_error("Public List", path, exc)
             return
         messagebox.showinfo(
             "Public List",
@@ -186,6 +198,11 @@ class SettingsReportsTab(ttk.Frame):
         )
         return Path(path) if path else None
 
+    def _show_save_error(self, title: str, path: Path, exc: OSError) -> None:
+        """Tell the user a file couldn't be written (locked, read-only, missing folder)."""
+        reason = exc.strerror or str(exc)
+        messagebox.showerror(title, f"Could not save {path}:\n{reason}", parent=self)
+
     def export_csv(self) -> None:
         if not self.current_report:
             self.generate()
@@ -194,7 +211,11 @@ class SettingsReportsTab(ttk.Frame):
         path = self._export_path(".csv")
         if not path:
             return
-        exports.export_csv(self.current_report, path)
+        try:
+            exports.export_csv(self.current_report, path)
+        except OSError as exc:
+            self._show_save_error("Export", path, exc)
+            return
         messagebox.showinfo("Export", f"Exported {path}", parent=self)
 
     def export_markdown(self) -> None:
@@ -205,5 +226,9 @@ class SettingsReportsTab(ttk.Frame):
         path = self._export_path(".md")
         if not path:
             return
-        exports.export_markdown(self.current_report, path)
+        try:
+            exports.export_markdown(self.current_report, path)
+        except OSError as exc:
+            self._show_save_error("Export", path, exc)
+            return
         messagebox.showinfo("Export", f"Exported {path}", parent=self)

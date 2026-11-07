@@ -10,6 +10,31 @@ from time_tracker.services.validation import basis_points_to_percent, parse_perc
 from time_tracker.util.time_utils import format_datetime, iso, parse_local_datetime
 
 
+def unique_choices(choices: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Make every (label, id) label unique by numbering repeats: "Admin", "Admin (2)".
+
+    Comboboxes hand back the chosen label, so two choices sharing a label
+    would map to the same id.
+    """
+    seen: dict[str, int] = {}
+    result = []
+    for label, choice_id in choices:
+        seen[label] = seen.get(label, 0) + 1
+        result.append((label if seen[label] == 1 else f"{label} ({seen[label]})", choice_id))
+    return result
+
+
+def work_item_choices(rows) -> list[tuple[str, str]]:
+    """Label work items for a combobox, marking public ones like the NWA picker does."""
+    choices = []
+    for row in rows:
+        label = row["name"]
+        if row["scope"] == "public":
+            label = f"{label} [{constants.PUBLIC.lower()}]"
+        choices.append((label, row["id"]))
+    return unique_choices(choices)
+
+
 class BaseDialog(tk.Toplevel):
     """Base class for modal dialogs with common boilerplate."""
 
@@ -129,7 +154,9 @@ class WorkItemDialog(BaseDialog):
         self.splits.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=8, pady=8)
 
         self.nwa_values = []
+        self._nwa_codes: dict[str, str] = {}
         for row in repository.list_nwas(conn):
+            self._nwa_codes[row["id"]] = row["code"]
             label = f"{row['code']} - {row['name'] or ''}".strip()
             if row["scope"] == "public":
                 label = f"{label} [{constants.PUBLIC.lower()}]"
@@ -149,8 +176,8 @@ class WorkItemDialog(BaseDialog):
             self.name.insert(0, initial["name"])
             self.description.insert("1.0", initial["description"] or "")
             for split in repository.get_work_item_splits(conn, initial["id"]):
-                # Splits on obsolete public NWAs show red: they need relinking.
-                stale = bool(split["is_obsolete"])
+                # Splits on removed or obsolete NWAs show red: they need relinking.
+                stale = bool(split["is_obsolete"] or split["is_deleted"])
                 item = self.splits.insert(
                     "",
                     "end",
@@ -170,12 +197,13 @@ class WorkItemDialog(BaseDialog):
             messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
             return
         nwa_id = self._nwa_id_map[self.nwa_combo.get()]
+        values = (self._nwa_codes[nwa_id], basis_points_to_percent(basis_points))
         # An NWA can only appear once per work item: update the existing row instead.
         for item, existing_id in self._split_ids.items():
             if existing_id == nwa_id:
-                self.splits.item(item, values=(self.nwa_combo.get().split(" - ")[0], basis_points_to_percent(basis_points)))
+                self.splits.item(item, values=values)
                 return
-        item = self.splits.insert("", "end", values=(self.nwa_combo.get().split(" - ")[0], basis_points_to_percent(basis_points)))
+        item = self.splits.insert("", "end", values=values)
         self._split_ids[item] = nwa_id
 
     def _remove_split(self) -> None:
@@ -229,9 +257,10 @@ class SessionDialog(BaseDialog):
         self.end.grid(row=1, column=1, padx=12, pady=4)
 
         ttk.Label(self, text=constants.WORK_ITEM).grid(row=2, column=0, sticky="w", padx=12, pady=4)
-        self.work_items = [(row["name"], row["id"]) for row in repository.list_work_items(conn)]
+        # Keyed by id, not name: work item names aren't unique.
+        self.work_items = work_item_choices(repository.list_work_items(conn))
         self._work_item_id_map = dict(self.work_items)
-        self.work_item = ttk.Combobox(self, values=[name for name, _ in self.work_items], state="readonly", width=26)
+        self.work_item = ttk.Combobox(self, values=[label for label, _ in self.work_items], state="readonly", width=26)
         self.work_item.grid(row=2, column=1, padx=12, pady=4)
 
         ttk.Label(self, text="Note").grid(row=3, column=0, sticky="w", padx=12, pady=4)
@@ -242,9 +271,10 @@ class SessionDialog(BaseDialog):
 
         self.start.insert(0, format_datetime(session["start_at"]))
         self.end.insert(0, format_datetime(session["end_at"]))
-        current_name = session["work_item_name"]
-        if current_name in [name for name, _ in self.work_items]:
-            self.work_item.set(current_name)
+        for label, work_item_id in self.work_items:
+            if work_item_id == session["work_item_id"]:
+                self.work_item.set(label)
+                break
         self.note.insert(0, session["note"] or "")
         self.wait_window()
 

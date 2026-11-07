@@ -169,9 +169,10 @@ class MoveWorkItemTests(unittest.TestCase):
         repository.move_work_item(self.conn, self.second, 1)
         self.assertEqual(self._order(), [self.first, self.second])
 
-    def test_move_invalid_id_raises(self):
-        with self.assertRaises(ValueError):
+    def test_move_invalid_id_raises_with_user_facing_message(self):
+        with self.assertRaises(ValueError) as ctx:
             repository.move_work_item(self.conn, "nonexistent-id", 1)
+        self.assertEqual(str(ctx.exception), "That work item no longer exists.")
 
     def test_move_past_top_raises_with_user_facing_message(self):
         with self.assertRaises(ValueError) as ctx:

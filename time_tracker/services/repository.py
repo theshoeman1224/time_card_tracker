@@ -169,13 +169,14 @@ def get_work_item(conn: sqlite3.Connection, work_item_id: str) -> sqlite3.Row | 
 def get_work_item_splits(conn: sqlite3.Connection, work_item_id: str) -> list[sqlite3.Row]:
     """Get NWA splits for a work item, ordered by NWA code.
 
-    Includes the NWA's scope and is_obsolete flags so callers can flag stale splits.
+    Includes the NWA's scope, is_obsolete, and is_deleted flags so callers can flag
+    stale splits.
     """
     return list(
         conn.execute(
             """
             SELECT s.work_item_id, s.nwa_id, s.percent_basis_points,
-                   n.code, n.name, n.scope, n.is_obsolete
+                   n.code, n.name, n.scope, n.is_obsolete, n.is_deleted
             FROM work_item_nwa_splits s
             JOIN nwas n ON n.id = s.nwa_id
             WHERE s.work_item_id = ?
@@ -276,23 +277,24 @@ def remove_work_item(conn: sqlite3.Connection, work_item_id: str) -> None:
 
 
 def list_stale_work_items(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """List (work item, stale NWA) pairs where a split points at an obsolete public NWA.
+    """List (work item, stale NWA) pairs where a split points at an NWA that's gone.
 
-    A work item is stale when at least one of its splits references a public NWA that a
-    newer public list dropped. Returns one row per stale split so the UI can highlight
-    the affected items and name the codes that need relinking.
+    A split is stale when its NWA was removed by the user or is a public NWA that a
+    newer public list dropped. Either way time keeps being charged to a code the user
+    can't see. Returns one row per stale split (nwa_deleted says which case) so the UI
+    can highlight the affected items and name the codes that need relinking.
     """
     return list(
         conn.execute(
             """
             SELECT w.id AS work_item_id, w.name AS work_item_name, w.scope AS work_item_scope,
                    w.is_obsolete AS work_item_obsolete,
-                   n.id AS nwa_id, n.code AS nwa_code
+                   n.id AS nwa_id, n.code AS nwa_code, n.is_deleted AS nwa_deleted
             FROM work_item_templates w
             JOIN work_item_nwa_splits s ON s.work_item_id = w.id
             JOIN nwas n ON n.id = s.nwa_id
             WHERE w.is_deleted = 0
-              AND n.scope = 'public' AND n.is_obsolete = 1
+              AND (n.is_deleted = 1 OR (n.scope = 'public' AND n.is_obsolete = 1))
             ORDER BY w.sort_order, w.name, n.code
             """
         )
@@ -300,7 +302,7 @@ def list_stale_work_items(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def stale_work_item_ids(conn: sqlite3.Connection) -> set[str]:
-    """Return the IDs of work items with at least one split pointing at an obsolete public NWA."""
+    """Return the IDs of work items with at least one stale split (see list_stale_work_items)."""
     return {row["work_item_id"] for row in list_stale_work_items(conn)}
 
 
@@ -312,6 +314,8 @@ def move_work_item(conn: sqlite3.Connection, work_item_id: str, delta: int) -> N
     """
     with transaction(conn):
         rows = [row["id"] for row in list_work_items(conn)]
+        if work_item_id not in rows:
+            raise ValueError("That work item no longer exists.")
         index = rows.index(work_item_id)
         new_index = index + delta
         if not 0 <= new_index < len(rows):
