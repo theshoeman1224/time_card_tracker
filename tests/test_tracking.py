@@ -6,6 +6,79 @@ from tests.helpers import memory_conn, seed_basic, write_list_file
 from time_tracker.services import public_list, repository, tracking
 
 
+def at(text: str) -> datetime:
+    return datetime.fromisoformat(text)
+
+
+class SameSecondCloseTests(unittest.TestCase):
+    """Closing a session in the second it started discards it instead of failing."""
+
+    def setUp(self):
+        self.conn = memory_conn()
+        _, _, self.work_item = seed_basic(self.conn)
+        nwa_c = repository.save_nwa(self.conn, "C", "NWA C")
+        self.other_item = repository.save_work_item(self.conn, "Review", "", [(nwa_c, 10000)])
+
+    def _sessions(self):
+        return list(self.conn.execute("SELECT * FROM time_sessions ORDER BY start_at"))
+
+    def test_pause_in_the_same_second_discards_the_session(self):
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T09:00:00-04:00"))
+        tracking.pause(self.conn, at("2026-07-02T09:00:00-04:00"))
+        self.assertEqual(self._sessions(), [])
+        self.assertIsNone(tracking.current_open_session(self.conn))
+
+    def test_pause_later_within_the_same_second_discards_the_session(self):
+        # Stored times drop microseconds, so 09:00:00.2 and 09:00:00.8 both store as 09:00:00.
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T09:00:00.200000-04:00"))
+        tracking.pause(self.conn, at("2026-07-02T09:00:00.800000-04:00"))
+        self.assertEqual(self._sessions(), [])
+
+    def test_pause_one_second_later_keeps_the_session(self):
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T09:00:00-04:00"))
+        tracking.pause(self.conn, at("2026-07-02T09:00:01-04:00"))
+        sessions = self._sessions()
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(tracking.session_seconds(sessions[0]), 1)
+
+    def test_switch_in_the_same_second_discards_the_old_session(self):
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T09:00:00-04:00"))
+        new_id = tracking.start_or_switch(self.conn, self.other_item, at("2026-07-02T09:00:00-04:00"))
+        sessions = self._sessions()
+        self.assertEqual([row["id"] for row in sessions], [new_id])
+        self.assertEqual(tracking.current_open_session(self.conn)["work_item_id"], self.other_item)
+
+    def test_switching_back_and_forth_in_one_second_leaves_one_open_session(self):
+        moment = at("2026-07-02T09:00:00-04:00")
+        tracking.start_or_switch(self.conn, self.work_item, moment)
+        tracking.start_or_switch(self.conn, self.other_item, moment)
+        tracking.start_or_switch(self.conn, self.work_item, moment)
+        sessions = self._sessions()
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]["work_item_id"], self.work_item)
+        self.assertIsNone(sessions[0]["end_at"])
+
+    def test_reset_day_in_the_same_second_discards_the_session(self):
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T09:00:00-04:00"))
+        tracking.reset_day(self.conn, at("2026-07-02T09:00:00-04:00"))
+        self.assertEqual(self._sessions(), [])
+        day = self.conn.execute("SELECT status FROM work_days WHERE work_date = '2026-07-02'").fetchone()
+        self.assertEqual(day["status"], "reset")
+
+    def test_clock_moved_back_discards_the_session(self):
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T09:00:00-04:00"))
+        tracking.pause(self.conn, at("2026-07-02T08:59:30-04:00"))
+        self.assertEqual(self._sessions(), [])
+
+    def test_times_are_compared_across_utc_offsets(self):
+        # 01:30 EDT is 40 minutes *before* 01:10 EST, though the text "01:30"
+        # sorts after "01:10". Compared as text this end would look later and
+        # the session would be kept with a negative length.
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-11-01T01:10:00-05:00"))
+        tracking.pause(self.conn, at("2026-11-01T01:30:00-04:00"))
+        self.assertEqual(self._sessions(), [])
+
+
 class TrackingTests(unittest.TestCase):
     def setUp(self):
         self.conn = memory_conn()
