@@ -196,7 +196,6 @@ class UpdateSessionInvariantTests(unittest.TestCase):
             tracking.update_session(self.conn, self.closed, "2026-07-02T09:00:00-04:00", None, self.work_item)
         self.assertEqual(self._open_count(), 1)
 
-    @unittest.expectedFailure  # Bug: the overlap query skips the open session (end_at IS NOT NULL).
     def test_overlap_with_the_open_session_is_rejected(self):
         tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T10:30:00-04:00"))
 

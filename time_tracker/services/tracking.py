@@ -161,15 +161,17 @@ def _validate_session_update(
         # Only the running session may be open-ended; re-opening a closed one
         # would leave two sessions open at once.
         raise ValueError("Only the running session can have a blank end time.")
-    overlap_end_at = end_at or iso(now_local())
+    now_text = iso(now_local())
+    overlap_end_at = end_at or now_text
+    # The running session counts too: it spans until now.
     overlap = conn.execute(
         """
         SELECT id FROM time_sessions
-        WHERE work_day_id = ? AND id <> ? AND end_at IS NOT NULL
-          AND start_at < ? AND end_at > ?
+        WHERE work_day_id = ? AND id <> ?
+          AND start_at < ? AND COALESCE(end_at, ?) > ?
         LIMIT 1
         """,
-        (session["work_day_id"], session_id, overlap_end_at, start_at),
+        (session["work_day_id"], session_id, overlap_end_at, now_text, start_at),
     ).fetchone()
     if overlap:
         raise ValueError("Edited session overlaps another session in the same work day.")
