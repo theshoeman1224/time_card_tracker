@@ -21,10 +21,10 @@ No `CONTEXT.md` or ADRs exist yet; domain terms below are the code's own (work i
 
 1. ✅ **Done (373901e) — Candidate 1: transaction ownership.** Durability moved behind the tracking and repository modules' interfaces: every mutating service function commits via `with conn:` and rolls back on failure; all 12 `conn.commit()` sites removed from the UI; `move_work_item` raises `ValueError` at boundaries (one failure protocol). Recorded as ADR-0001; term pinned in `CONTEXT.md`. *Follow-up (2026-11-07):* nested `with conn:` blocks committed the caller's transaction early, so composed calls weren't atomic; services now use `db.transaction`, which nests as savepoints.
 2. ✅ **Done — Candidate 2: day totals.** The "open session ends now" rule moved into the tracking module as `session_seconds`/`work_day_seconds`; `reports.generate_report` and the sessions toolbar/elapsed label consume the same interface; `seconds_between` restored to pure two-arg time math. Behavior preserved (reports include the open session up to now).
-3. **Candidate 5 (first half) — invariant tests.** With 1–2 in place, add tests through the tracking module's interface: `update_session(end_at=None)` on a closed session must not re-open it (currently a hole in the one-open-session invariant, `tracking.py:131–133`).
+3. ✅ **Done (2026-11-07) — Candidate 5 (first half): invariant tests.** `update_session(end_at=None)` on a closed session now raises `ValueError` instead of re-opening it, so the one-open-session invariant holds at every entry point. Pinned by `test_clearing_end_on_closed_session_is_rejected`.
 4. **Candidate 3 — dialog intake seam.** Extract pure `validate(form) → draft` per dialog; dialogs become thin Tk adapters that collect fields and render errors. Options passed in, not re-queried from the DB in `__init__`.
 5. **Candidate 4 — repository narrowing.** Domain-shaped returns (percent strings, tag lists) absorb SQL artifacts (GROUP_CONCAT, basis points, `sort_order` guarantees). Retires the divergent second percent formatter at `work_items_tab.py:97`.
-6. **Candidate 5 (second half) + 6.** Happy-path test for `move_work_item` (one failure protocol, not two); pure `paths.py` if `db.connect`/`app.main` ever get tests.
+6. **Candidate 5 (second half) + 6.** ✅ Happy-path test for `move_work_item` added (`MoveWorkItemTests.test_move_up_and_back_down`). Still open: pure `paths.py` (candidate 6) — `db.connect` and `paths.py` now have tests, but the getters still create directories.
 
 ## Deletion test notes
 

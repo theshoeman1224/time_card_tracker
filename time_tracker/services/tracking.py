@@ -157,6 +157,10 @@ def _validate_session_update(
     end = parse_iso(end_at) if end_at else None
     if end and end <= start:
         raise ValueError("End time must be after start time.")
+    if end is None and session["end_at"] is not None:
+        # Only the running session may be open-ended; re-opening a closed one
+        # would leave two sessions open at once.
+        raise ValueError("Only the running session can have a blank end time.")
     overlap_end_at = end_at or iso(now_local())
     overlap = conn.execute(
         """

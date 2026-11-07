@@ -189,7 +189,6 @@ class UpdateSessionInvariantTests(unittest.TestCase):
     def _open_count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM time_sessions WHERE end_at IS NULL").fetchone()[0]
 
-    @unittest.expectedFailure  # Bug: a blank end time re-opens a closed session.
     def test_clearing_end_on_closed_session_is_rejected(self):
         tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T10:30:00-04:00"))
 
