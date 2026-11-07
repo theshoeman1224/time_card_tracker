@@ -170,7 +170,6 @@ class SwitchAcrossMidnightTests(unittest.TestCase):
 
         self.assertEqual(session_work_date(self.conn, first), "2026-07-02")
 
-    @unittest.expectedFailure  # Bug: the new session inherits the old session's work day.
     def test_switch_after_midnight_files_new_session_under_the_new_day(self):
         tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T23:00:00-04:00"))
         second = tracking.start_or_switch(self.conn, self.other, at("2026-07-03T09:00:00-04:00"))
@@ -190,7 +189,6 @@ class UpdateSessionInvariantTests(unittest.TestCase):
     def _open_count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM time_sessions WHERE end_at IS NULL").fetchone()[0]
 
-    @unittest.expectedFailure  # Bug: a blank end time re-opens a closed session.
     def test_clearing_end_on_closed_session_is_rejected(self):
         tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T10:30:00-04:00"))
 
@@ -198,7 +196,6 @@ class UpdateSessionInvariantTests(unittest.TestCase):
             tracking.update_session(self.conn, self.closed, "2026-07-02T09:00:00-04:00", None, self.work_item)
         self.assertEqual(self._open_count(), 1)
 
-    @unittest.expectedFailure  # Bug: the overlap query skips the open session (end_at IS NOT NULL).
     def test_overlap_with_the_open_session_is_rejected(self):
         tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T10:30:00-04:00"))
 
@@ -207,13 +204,22 @@ class UpdateSessionInvariantTests(unittest.TestCase):
                 self.conn, self.closed, "2026-07-02T09:00:00-04:00", "2026-07-02T11:00:00-04:00", self.work_item
             )
 
-    @unittest.expectedFailure  # Bug: work_day_id is never re-derived from the new start time.
     def test_moving_a_session_to_another_date_moves_its_work_day(self):
         tracking.update_session(
             self.conn, self.closed, "2026-07-05T09:00:00-04:00", "2026-07-05T10:00:00-04:00", self.work_item
         )
 
         self.assertEqual(session_work_date(self.conn, self.closed), "2026-07-05")
+
+    def test_overlap_is_checked_on_the_destination_day(self):
+        tracking.start_or_switch(self.conn, self.work_item, at("2026-07-05T09:00:00-04:00"))
+        tracking.pause(self.conn, at("2026-07-05T10:00:00-04:00"))
+
+        with self.assertRaises(ValueError):
+            tracking.update_session(
+                self.conn, self.closed, "2026-07-05T09:30:00-04:00", "2026-07-05T10:30:00-04:00", self.work_item
+            )
+        self.assertEqual(session_work_date(self.conn, self.closed), "2026-07-02")
 
     def test_changing_work_item_resnapshots_splits(self):
         other = repository.save_work_item(self.conn, "Other", "", [(self.nwa_a, 10000)])
@@ -244,7 +250,6 @@ class UpdateSessionInvariantTests(unittest.TestCase):
 class StartInactiveWorkItemTests(unittest.TestCase):
     """The service, not just the UI, should refuse to track items the user can't see."""
 
-    @unittest.expectedFailure  # Bug: start_or_switch never checks is_deleted.
     def test_starting_a_removed_work_item_raises(self):
         conn = memory_conn()
         _, _, work_item = seed_basic(conn)
@@ -253,7 +258,6 @@ class StartInactiveWorkItemTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tracking.start_or_switch(conn, work_item, at("2026-07-02T09:00:00-04:00"))
 
-    @unittest.expectedFailure  # Bug: start_or_switch never checks is_obsolete; only the UI guards it.
     def test_starting_an_obsolete_public_work_item_raises(self):
         conn = memory_conn()
         public_list.import_public_list(
@@ -269,6 +273,27 @@ class StartInactiveWorkItemTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tracking.start_or_switch(conn, item, at("2026-07-02T09:00:00-04:00"))
 
+
+    def test_reselecting_the_running_item_after_it_is_removed_keeps_its_session(self):
+        conn = memory_conn()
+        _, _, work_item = seed_basic(conn)
+        session_id = tracking.start_or_switch(conn, work_item, at("2026-07-02T09:00:00-04:00"))
+        repository.remove_work_item(conn, work_item)
+
+        self.assertEqual(tracking.start_or_switch(conn, work_item, at("2026-07-02T09:30:00-04:00")), session_id)
+
+    def test_reassigning_a_session_to_a_removed_work_item_raises(self):
+        conn = memory_conn()
+        nwa_a, _, work_item = seed_basic(conn)
+        other = repository.save_work_item(conn, "Other", "", [(nwa_a, 10000)])
+        session_id = tracking.start_or_switch(conn, work_item, at("2026-07-02T09:00:00-04:00"))
+        tracking.pause(conn, at("2026-07-02T10:00:00-04:00"))
+        repository.remove_work_item(conn, other)
+
+        with self.assertRaises(ValueError):
+            tracking.update_session(
+                conn, session_id, "2026-07-02T09:00:00-04:00", "2026-07-02T10:00:00-04:00", other
+            )
 
 if __name__ == "__main__":
     unittest.main()

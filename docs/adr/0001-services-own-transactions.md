@@ -10,9 +10,9 @@ Service modules (`services/tracking.py`, `services/repository.py`) mutated the d
 
 ## Decision
 
-Every mutating service function owns its transaction: the implementation wraps its writes in `with conn:`, so sqlite3 commits on success and rolls back the whole transaction on exception. Failures that a user should see are raised as `ValueError` (domain errors) or `sqlite3.IntegrityError` (duplicate NWA codes); UI handlers catch these and show a messagebox — the status reaching the user. Silent no-ops (e.g. pausing with no open session) are successes and produce no message.
+Every mutating service function owns its transaction: the implementation wraps its writes in `db.transaction(conn)`, which commits on success and rolls back the whole transaction on exception. Failures that a user should see are raised as `ValueError` (domain errors) or `sqlite3.IntegrityError` (duplicate NWA codes); UI handlers catch these and show a messagebox — the status reaching the user. Silent no-ops (e.g. pausing with no open session) are successes and produce no message.
 
-Functions that compose others (`save_work_item`, `reset_day`) rely on their callees' transactions; a nested `with conn:` commit only flushes already-complete work, and any exception rolls back the entire open transaction. `save_work_item` and `move_work_item`'s old `False`-at-boundary return are gone: `move_work_item` raises `ValueError` for unknown IDs and boundary moves alike — one failure protocol per interface.
+Functions that compose others (`reset_day`, `start_or_switch`, `import_public_list`) call services that open their own transactions. `db.transaction` makes that safe: the outermost block owns BEGIN/COMMIT, and a block entered inside an open transaction runs as a SAVEPOINT, so nothing commits until the outermost block finishes and any exception escaping it rolls back everything. `save_work_item` and `move_work_item`'s old `False`-at-boundary return are gone: `move_work_item` raises `ValueError` for unknown IDs and boundary moves alike — one failure protocol per interface.
 
 ## Consequences
 
@@ -20,3 +20,4 @@ Functions that compose others (`save_work_item`, `reset_day`) rely on their call
 - A caller that forgets to catch fails loudly instead of losing data silently.
 - Multi-step operations (reset day, create-with-splits) are atomic per service call.
 - Tests exercise the service interface exactly as callers do, with no commit in setup.
+- Services never use a bare `with conn:`: on exit it commits whatever transaction is open, including a caller's half-finished one. An earlier version of this ADR claimed a nested `with conn:` was harmless; it is not, and it let a failed public list import leave a partial list behind (fixed 2026-11-07).

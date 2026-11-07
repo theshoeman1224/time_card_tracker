@@ -3,6 +3,7 @@ import unittest
 from time_tracker.util.time_utils import (
     apportion_rounded,
     decimal_hours,
+    hour_places,
     human_duration,
     parse_local_datetime,
     round_seconds,
@@ -83,6 +84,24 @@ class DecimalHoursTests(unittest.TestCase):
 
     def test_half_hour(self):
         self.assertEqual(decimal_hours(30 * 60), "0.5")
+
+    def test_two_places_shows_quarter_hours_exactly(self):
+        self.assertEqual(decimal_hours(15 * 60, places=2), "0.25")
+        self.assertEqual(decimal_hours(45 * 60, places=2), "0.75")
+
+    def test_two_places_rounds_half_up(self):
+        self.assertEqual(decimal_hours(5 * 60, places=2), "0.08")
+        self.assertEqual(decimal_hours(27, places=2), "0.01")  # 0.0075 h
+
+
+class HourPlacesTests(unittest.TestCase):
+    def test_multiples_of_six_minutes_use_one_place(self):
+        for increment in (6, 30, 60):
+            self.assertEqual(hour_places(increment), 1, increment)
+
+    def test_other_increments_use_two_places(self):
+        for increment in (1, 5, 10, 15):
+            self.assertEqual(hour_places(increment), 2, increment)
 
 
 class HumanDurationTests(unittest.TestCase):

@@ -255,14 +255,6 @@ class WorkItemsTab(ttk.Frame):
         row_id = self.selected_work_item_id()
         if not row_id:
             return
-        row = self._work_rows.get(row_id)
-        if row and row["scope"] == "public" and row["is_obsolete"]:
-            messagebox.showerror(
-                "Tracking",
-                "This work item was dropped from the public list and can no longer be tracked.",
-                parent=self,
-            )
-            return
         try:
             tracking.start_or_switch(self.conn, row_id)
             self.on_change()

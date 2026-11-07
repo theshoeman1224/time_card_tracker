@@ -5,6 +5,13 @@ from pathlib import Path
 
 from time_tracker import constants
 
+
+def _md_cell(value: object) -> str:
+    """Make text safe for a Markdown table cell: escape pipes, fold line breaks."""
+    text = str(value).replace("\\", "\\\\").replace("|", "\\|")
+    return " ".join(text.splitlines())
+
+
 def export_csv(report: dict[str, object], path: Path) -> None:
     """Write a report as CSV with a Section column separating work items from NWAs."""
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -27,8 +34,8 @@ def export_markdown(report: dict[str, object], path: Path) -> None:
         "|---|---:|---:|",
     ]
     for row in report["work_items"]:
-        lines.append(f"| {row['name']} | {row['raw']} | {row['rounded']} |")
+        lines.append(f"| {_md_cell(row['name'])} | {row['raw']} | {row['rounded']} |")
     lines.extend(["", f"## {constants.NWA}s", "", f"| {constants.NWA} | {constants.RAW} | {constants.ROUNDED} |", "|---|---:|---:|"])
     for row in report["nwas"]:
-        lines.append(f"| {row['code']} | {row['raw']} | {row['rounded']} |")
+        lines.append(f"| {_md_cell(row['code'])} | {row['raw']} | {row['rounded']} |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

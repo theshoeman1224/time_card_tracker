@@ -157,5 +157,58 @@ class ConnectTests(unittest.TestCase):
             conn.close()
 
 
+class TransactionTests(unittest.TestCase):
+    """db.transaction: outermost block commits; nested blocks join it as savepoints."""
+
+    def _probe(self, conn, key: str) -> bool:
+        return conn.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone() is not None
+
+    def test_commits_on_success(self):
+        conn = memory_conn()
+        with db.transaction(conn):
+            conn.execute("INSERT INTO settings(key, value) VALUES ('probe', '1')")
+        self.assertFalse(conn.in_transaction)
+        self.assertTrue(self._probe(conn, "probe"))
+
+    def test_rolls_back_on_error(self):
+        conn = memory_conn()
+        with self.assertRaises(RuntimeError):
+            with db.transaction(conn):
+                conn.execute("INSERT INTO settings(key, value) VALUES ('probe', '1')")
+                raise RuntimeError("boom")
+        self.assertFalse(self._probe(conn, "probe"))
+
+    def test_nested_block_does_not_commit_the_outer_transaction(self):
+        conn = memory_conn()
+        with self.assertRaises(RuntimeError):
+            with db.transaction(conn):
+                conn.execute("INSERT INTO settings(key, value) VALUES ('outer', '1')")
+                with db.transaction(conn):
+                    conn.execute("INSERT INTO settings(key, value) VALUES ('inner', '1')")
+                raise RuntimeError("boom")
+        self.assertFalse(self._probe(conn, "outer"))
+        self.assertFalse(self._probe(conn, "inner"))
+
+    def test_nested_failure_undoes_only_its_own_work(self):
+        conn = memory_conn()
+        with db.transaction(conn):
+            conn.execute("INSERT INTO settings(key, value) VALUES ('outer', '1')")
+            with self.assertRaises(RuntimeError):
+                with db.transaction(conn):
+                    conn.execute("INSERT INTO settings(key, value) VALUES ('inner', '1')")
+                    raise RuntimeError("boom")
+        self.assertTrue(self._probe(conn, "outer"))
+        self.assertFalse(self._probe(conn, "inner"))
+
+    def test_composed_service_calls_roll_back_together(self):
+        conn = memory_conn()
+        nwa_id = repository.save_nwa(conn, "X", "NWA X", tags="old")
+        with self.assertRaises(RuntimeError):
+            with db.transaction(conn):
+                repository.replace_nwa_tags(conn, nwa_id, ["new"])
+                raise RuntimeError("boom")
+        self.assertEqual(repository.list_nwas(conn)[0]["tags"], "old")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,7 @@ import json
 import sqlite3
 import uuid
 
+from time_tracker.db import transaction
 from time_tracker.services.validation import validate_split_total
 from time_tracker.util.time_utils import iso, now_local
 
@@ -39,7 +40,13 @@ def list_nwas(
         sql += " AND n.scope = ?"
         params.append(scope)
     if query.strip():
-        sql += " AND (n.code LIKE ? OR n.name LIKE ? OR t.name LIKE ?)"
+        # Match tags with EXISTS rather than on the joined tag row: filtering the join
+        # would drop the non-matching tags from the row's GROUP_CONCAT.
+        sql += """
+          AND (n.code LIKE ? OR n.name LIKE ? OR EXISTS (
+                SELECT 1 FROM nwa_tags snt JOIN tags st ON st.id = snt.tag_id
+                WHERE snt.nwa_id = n.id AND st.name LIKE ?))
+        """
         needle = f"%{query.strip()}%"
         params.extend([needle, needle, needle])
     sql += " GROUP BY n.id ORDER BY n.code"
@@ -57,13 +64,16 @@ def save_nwa(
 ) -> str:
     """Create or update an NWA. Returns the NWA ID. Commits on success; rolls back and re-raises on failure.
 
-    scope only applies on create; an update never changes an NWA's scope.
+    scope only applies on create; an update never changes an NWA's scope. Creating
+    an NWA whose code belongs to a removed NWA of the same scope revives that row,
+    so removed codes can be reused. Raises sqlite3.IntegrityError when the code is
+    already active.
     """
     now = iso(now_local())
     code = code.strip()
     if not code:
         raise ValueError("NWA code is required.")
-    with conn:
+    with transaction(conn):
         if nwa_id:
             conn.execute(
                 "UPDATE nwas SET code = ?, name = ?, notes = ?, is_deleted = 0, updated_at = ? WHERE id = ?",
@@ -71,11 +81,26 @@ def save_nwa(
             )
             saved_id = nwa_id
         else:
-            saved_id = new_id()
-            conn.execute(
-                "INSERT INTO nwas(id, code, name, notes, scope, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (saved_id, code, name.strip(), notes.strip(), scope, now, now),
-            )
+            removed = conn.execute(
+                "SELECT id, scope FROM nwas WHERE code = ? AND is_deleted = 1", (code,)
+            ).fetchone()
+            if removed and removed["scope"] != scope:
+                raise ValueError(
+                    f"NWA code '{code}' belongs to a removed {removed['scope']} NWA and can't be "
+                    f"reused for a {scope} one."
+                )
+            if removed:
+                saved_id = removed["id"]
+                conn.execute(
+                    "UPDATE nwas SET name = ?, notes = ?, is_deleted = 0, is_obsolete = 0, updated_at = ? WHERE id = ?",
+                    (name.strip(), notes.strip(), now, saved_id),
+                )
+            else:
+                saved_id = new_id()
+                conn.execute(
+                    "INSERT INTO nwas(id, code, name, notes, scope, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (saved_id, code, name.strip(), notes.strip(), scope, now, now),
+                )
         replace_nwa_tags(conn, saved_id, tags)
         return saved_id
 
@@ -86,7 +111,7 @@ def replace_nwa_tags(conn: sqlite3.Connection, nwa_id: str, tags: str | list[str
         tag_names = [tag.strip() for tag in tags.split(",") if tag.strip()]
     else:
         tag_names = [tag.strip() for tag in tags if tag.strip()]
-    with conn:
+    with transaction(conn):
         conn.execute("DELETE FROM nwa_tags WHERE nwa_id = ?", (nwa_id,))
         unique_names = list(dict.fromkeys(tag_names))
         if not unique_names:
@@ -108,7 +133,7 @@ def replace_nwa_tags(conn: sqlite3.Connection, nwa_id: str, tags: str | list[str
 
 def remove_nwa(conn: sqlite3.Connection, nwa_id: str) -> None:
     """Soft-delete an NWA by setting is_deleted = 1."""
-    with conn:
+    with transaction(conn):
         conn.execute("UPDATE nwas SET is_deleted = 1, updated_at = ? WHERE id = ?", (iso(now_local()), nwa_id))
 
 
@@ -174,7 +199,7 @@ def create_work_item(
     name = name.strip()
     if not name:
         raise ValueError("Work item name is required.")
-    with conn:
+    with transaction(conn):
         work_item_id = new_id()
         sort_order = conn.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM work_item_templates").fetchone()[0]
         conn.execute(
@@ -207,7 +232,7 @@ def update_work_item(
     name = name.strip()
     if not name:
         raise ValueError("Work item name is required.")
-    with conn:
+    with transaction(conn):
         conn.execute(
             "UPDATE work_item_templates SET name = ?, description = ?, is_deleted = 0, updated_at = ? WHERE id = ?",
             (name, description.strip(), now, work_item_id),
@@ -243,7 +268,7 @@ def save_work_item(
 
 def remove_work_item(conn: sqlite3.Connection, work_item_id: str) -> None:
     """Soft-delete a work item by setting is_deleted = 1."""
-    with conn:
+    with transaction(conn):
         conn.execute(
             "UPDATE work_item_templates SET is_deleted = 1, updated_at = ? WHERE id = ?",
             (iso(now_local()), work_item_id),
@@ -285,7 +310,7 @@ def move_work_item(conn: sqlite3.Connection, work_item_id: str, delta: int) -> N
     Raises ValueError if the work item is unknown or already at the boundary.
     Commits on success; rolls back and re-raises on failure.
     """
-    with conn:
+    with transaction(conn):
         rows = [row["id"] for row in list_work_items(conn)]
         index = rows.index(work_item_id)
         new_index = index + delta
@@ -327,7 +352,7 @@ def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
 
 def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
     """Insert or update a setting value."""
-    with conn:
+    with transaction(conn):
         conn.execute(
             "INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value),
