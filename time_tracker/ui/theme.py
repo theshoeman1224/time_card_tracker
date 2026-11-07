@@ -120,6 +120,12 @@ def apply_theme(root: tk.Misc, name: str) -> None:
         selectbackground=[("readonly", p["select_bg"])],
         selectforeground=[("readonly", p["select_fg"])],
     )
+    # Read-only entries (the Settings tab's file paths) blend into the window.
+    style.map(
+        "TEntry",
+        fieldbackground=[("readonly", p["bg"]), ("disabled", p["bg"])],
+        foreground=[("disabled", p["disabled_fg"])],
+    )
     style.map("TCheckbutton", indicatorbackground=[("pressed", p["active"]), ("disabled", p["bg"])])
     style.configure("TNotebook.Tab", background=p["dark"])
     style.map("TNotebook.Tab", background=[("selected", p["bg"]), ("active", p["active"])])

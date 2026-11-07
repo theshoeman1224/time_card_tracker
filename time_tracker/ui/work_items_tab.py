@@ -8,7 +8,7 @@ from time_tracker import constants
 from time_tracker.services import repository, tracking
 from time_tracker.ui.dialogs import SessionDialog, WorkItemDialog
 from time_tracker.ui import theme
-from time_tracker.ui.widgets import scrolled_tree
+from time_tracker.ui.widgets import scrolled_tree, set_column_visible
 from time_tracker.util.time_utils import format_date, format_datetime, human_duration
 
 
@@ -101,6 +101,7 @@ class WorkItemsTab(ttk.Frame):
         self._refresh_status(active)
 
     def _refresh_items(self, active: sqlite3.Row | None) -> None:
+        set_column_visible(self.items, "scope", not repository.scope_column_hidden(self.conn))
         selected = self.selected_work_item_id()
         self.items.delete(*self.items.get_children())
         self._work_rows.clear()
