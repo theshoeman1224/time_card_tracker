@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
+from time_tracker.db import transaction
 from time_tracker.services import repository
 from time_tracker.util.time_utils import iso, now_local, parse_iso
 
@@ -10,12 +11,12 @@ from time_tracker.util.time_utils import iso, now_local, parse_iso
 def get_or_create_work_day(conn: sqlite3.Connection, current: datetime | None = None) -> str:
     """Get or create a work day for the given date. Returns the work day ID.
 
-    Commits on success. Safe to compose inside a caller's transaction: the
-    nested commit only flushes already-complete work.
+    Commits on success. Inside a caller's transaction it joins that
+    transaction (as a savepoint) instead of committing it.
     """
     current = current or now_local()
     work_date = current.date().isoformat()
-    with conn:
+    with transaction(conn):
         row = conn.execute("SELECT id FROM work_days WHERE work_date = ?", (work_date,)).fetchone()
         if row:
             return row["id"]
@@ -49,7 +50,7 @@ def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: dateti
     """
     current = current or now_local()
     now_text = iso(current)
-    with conn:
+    with transaction(conn):
         active = current_open_session(conn)
         if active and active["work_item_id"] == work_item_id:
             return active["id"]
@@ -77,7 +78,7 @@ def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: dateti
 
 def pause(conn: sqlite3.Connection, current: datetime | None = None) -> None:
     """Close the currently open session. Silent no-op if no session is open."""
-    with conn:
+    with transaction(conn):
         active = current_open_session(conn)
         if not active:
             return
@@ -91,7 +92,7 @@ def pause(conn: sqlite3.Connection, current: datetime | None = None) -> None:
 def reset_day(conn: sqlite3.Connection, current: datetime | None = None) -> None:
     """Pause any open session and mark the current day as reset."""
     current = current or now_local()
-    with conn:
+    with transaction(conn):
         pause(conn, current)
         work_day_id = get_or_create_work_day(conn, current)
         conn.execute(
@@ -185,7 +186,7 @@ def update_session(
     by the item's current splits. Commits on success; rolls back and re-raises
     on failure.
     """
-    with conn:
+    with transaction(conn):
         session = _validate_session_update(conn, session_id, start_at, end_at)
         now_text = iso(now_local())
         snapshot = session["split_snapshot_json"]

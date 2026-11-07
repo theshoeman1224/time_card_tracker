@@ -15,4 +15,4 @@ Domain glossary for the time card tracker. Terms are added as the domain model s
 
 ## Architecture terms
 
-- **Transaction ownership** — mutating service functions own durability: they commit on success and roll back on failure (via `with conn:`), raising `ValueError`/`IntegrityError` for user-facing failures. The UI never commits; it catches those exceptions and shows the user a messagebox. Silent no-ops (e.g. pausing with nothing running) are successes, not errors. See ADR-0001.
+- **Transaction ownership** — mutating service functions own durability: they commit on success and roll back on failure (via `db.transaction`, which nests as savepoints so composed calls stay atomic), raising `ValueError`/`IntegrityError` for user-facing failures. The UI never commits; it catches those exceptions and shows the user a messagebox. Silent no-ops (e.g. pausing with nothing running) are successes, not errors. See ADR-0001.

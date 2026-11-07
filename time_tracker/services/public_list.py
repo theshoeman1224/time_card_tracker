@@ -28,6 +28,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from time_tracker.db import transaction
 from time_tracker.services import repository
 from time_tracker.util.time_utils import iso, now_local
 
@@ -104,7 +105,7 @@ def import_public_list(conn: sqlite3.Connection, path: Path | str) -> dict[str, 
 
     _validate_file_contents(nwa_entries, item_entries)
 
-    with conn:
+    with transaction(conn):
         _validate_against_database(conn, nwa_entries)
 
         # 1. Obsolete the entire current public set; the file revives whatever survives.

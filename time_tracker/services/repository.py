@@ -4,6 +4,7 @@ import json
 import sqlite3
 import uuid
 
+from time_tracker.db import transaction
 from time_tracker.services.validation import validate_split_total
 from time_tracker.util.time_utils import iso, now_local
 
@@ -63,7 +64,7 @@ def save_nwa(
     code = code.strip()
     if not code:
         raise ValueError("NWA code is required.")
-    with conn:
+    with transaction(conn):
         if nwa_id:
             conn.execute(
                 "UPDATE nwas SET code = ?, name = ?, notes = ?, is_deleted = 0, updated_at = ? WHERE id = ?",
@@ -86,7 +87,7 @@ def replace_nwa_tags(conn: sqlite3.Connection, nwa_id: str, tags: str | list[str
         tag_names = [tag.strip() for tag in tags.split(",") if tag.strip()]
     else:
         tag_names = [tag.strip() for tag in tags if tag.strip()]
-    with conn:
+    with transaction(conn):
         conn.execute("DELETE FROM nwa_tags WHERE nwa_id = ?", (nwa_id,))
         unique_names = list(dict.fromkeys(tag_names))
         if not unique_names:
@@ -108,7 +109,7 @@ def replace_nwa_tags(conn: sqlite3.Connection, nwa_id: str, tags: str | list[str
 
 def remove_nwa(conn: sqlite3.Connection, nwa_id: str) -> None:
     """Soft-delete an NWA by setting is_deleted = 1."""
-    with conn:
+    with transaction(conn):
         conn.execute("UPDATE nwas SET is_deleted = 1, updated_at = ? WHERE id = ?", (iso(now_local()), nwa_id))
 
 
@@ -174,7 +175,7 @@ def create_work_item(
     name = name.strip()
     if not name:
         raise ValueError("Work item name is required.")
-    with conn:
+    with transaction(conn):
         work_item_id = new_id()
         sort_order = conn.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM work_item_templates").fetchone()[0]
         conn.execute(
@@ -207,7 +208,7 @@ def update_work_item(
     name = name.strip()
     if not name:
         raise ValueError("Work item name is required.")
-    with conn:
+    with transaction(conn):
         conn.execute(
             "UPDATE work_item_templates SET name = ?, description = ?, is_deleted = 0, updated_at = ? WHERE id = ?",
             (name, description.strip(), now, work_item_id),
@@ -243,7 +244,7 @@ def save_work_item(
 
 def remove_work_item(conn: sqlite3.Connection, work_item_id: str) -> None:
     """Soft-delete a work item by setting is_deleted = 1."""
-    with conn:
+    with transaction(conn):
         conn.execute(
             "UPDATE work_item_templates SET is_deleted = 1, updated_at = ? WHERE id = ?",
             (iso(now_local()), work_item_id),
@@ -285,7 +286,7 @@ def move_work_item(conn: sqlite3.Connection, work_item_id: str, delta: int) -> N
     Raises ValueError if the work item is unknown or already at the boundary.
     Commits on success; rolls back and re-raises on failure.
     """
-    with conn:
+    with transaction(conn):
         rows = [row["id"] for row in list_work_items(conn)]
         index = rows.index(work_item_id)
         new_index = index + delta
@@ -327,7 +328,7 @@ def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
 
 def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
     """Insert or update a setting value."""
-    with conn:
+    with transaction(conn):
         conn.execute(
             "INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value),

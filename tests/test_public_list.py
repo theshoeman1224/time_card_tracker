@@ -522,7 +522,6 @@ class ImportEdgeCaseTests(unittest.TestCase):
 class ImportAtomicityTests(unittest.TestCase):
     """ADR-0002: any failure during import leaves the previous public list intact."""
 
-    @unittest.expectedFailure  # Bug: replace_nwa_tags' nested `with conn:` commits mid-import.
     def test_failure_after_nwa_upsert_rolls_back_the_whole_import(self):
         conn = memory_conn()
         public_list.import_public_list(conn, write_list_file(nwas=[{"code": "OLD-1"}], work_items=[]))

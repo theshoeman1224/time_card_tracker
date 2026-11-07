@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from time_tracker.paths import database_path
@@ -155,3 +158,33 @@ def migrate(conn: sqlite3.Connection) -> None:
     for key, value in DEFAULT_SETTINGS.items():
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (key, value))
     conn.commit()
+
+
+@contextmanager
+def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    """Run a block atomically; nested blocks join the enclosing transaction.
+
+    The outermost block BEGINs, then COMMITs on success or rolls back on any
+    exception. A block entered while a transaction is already open runs as a
+    SAVEPOINT instead: its own failure undoes only its work, and nothing is
+    committed until the outermost block finishes. (A bare `with conn:` would
+    commit the caller's half-finished transaction on exit.)
+    """
+    if not conn.in_transaction:
+        conn.execute("BEGIN")
+        try:
+            yield conn
+        except BaseException:
+            conn.rollback()
+            raise
+        conn.commit()
+        return
+    savepoint = f"sp_{uuid.uuid4().hex}"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        yield conn
+    except BaseException:
+        conn.execute(f"ROLLBACK TO {savepoint}")
+        conn.execute(f"RELEASE {savepoint}")
+        raise
+    conn.execute(f"RELEASE {savepoint}")
