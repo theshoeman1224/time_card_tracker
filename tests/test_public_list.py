@@ -1,10 +1,11 @@
 import json
+import sqlite3
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
 
-from tests.helpers import memory_conn, seed_basic
+from tests.helpers import memory_conn, seed_basic, write_list_file
 from time_tracker.services import public_list, repository, tracking
 
 
@@ -16,20 +17,6 @@ def seed_public_nwa(conn, code="PUB-1", name="Public NWA"):
 def seed_public_work_item(conn, nwa_id, name="Public Task"):
     """Create a public work item split 100% onto the given NWA. Returns the item ID."""
     return repository.save_work_item(conn, name, "", [(nwa_id, 10000)], scope="public")
-
-
-def write_list_file(nwas, work_items) -> Path:
-    """Write a public list payload to a temp file and return its path."""
-    payload = {
-        "format_version": public_list.PUBLIC_LIST_FORMAT_VERSION,
-        "exported_at": "2026-08-28T09:00:00-04:00",
-        "nwas": nwas,
-        "work_items": work_items,
-    }
-    handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
-    json.dump(payload, handle)
-    handle.close()
-    return Path(handle.name)
 
 
 class NwaScopeTests(unittest.TestCase):
@@ -507,6 +494,55 @@ class ImportTests(unittest.TestCase):
         conn = memory_conn()
         with self.assertRaises(ValueError):
             public_list.import_public_list(conn, Path("/nonexistent/list.json"))
+
+
+class ImportEdgeCaseTests(unittest.TestCase):
+    def test_reimport_with_changed_tags_replaces_tags(self):
+        conn = memory_conn()
+        public_list.import_public_list(conn, write_list_file(nwas=[{"code": "PUB-A", "tags": ["x"]}], work_items=[]))
+
+        public_list.import_public_list(
+            conn, write_list_file(nwas=[{"code": "PUB-A", "tags": ["y", "z"]}], work_items=[])
+        )
+
+        tags = repository.list_nwas(conn, scope="public")[0]["tags"]
+        self.assertEqual(sorted(tags.split(", ")), ["y", "z"])
+
+    @unittest.expectedFailure  # Bug: removed personal NWAs still count as collisions (and keep the code UNIQUE).
+    def test_import_over_a_removed_personal_nwa_succeeds(self):
+        conn = memory_conn()
+        personal = repository.save_nwa(conn, "PUB-A", "My old copy")
+        repository.remove_nwa(conn, personal)
+
+        public_list.import_public_list(conn, write_list_file(nwas=[{"code": "PUB-A"}], work_items=[]))
+
+        self.assertEqual([row["code"] for row in repository.list_nwas(conn, scope="public")], ["PUB-A"])
+
+
+class ImportAtomicityTests(unittest.TestCase):
+    """ADR-0002: any failure during import leaves the previous public list intact."""
+
+    @unittest.expectedFailure  # Bug: replace_nwa_tags' nested `with conn:` commits mid-import.
+    def test_failure_after_nwa_upsert_rolls_back_the_whole_import(self):
+        conn = memory_conn()
+        public_list.import_public_list(conn, write_list_file(nwas=[{"code": "OLD-1"}], work_items=[]))
+        # Fail on the first work item insert, after the NWAs have been upserted.
+        conn.execute(
+            "CREATE TEMP TRIGGER fail_item_insert BEFORE INSERT ON work_item_templates "
+            "BEGIN SELECT RAISE(ABORT, 'forced failure'); END"
+        )
+
+        with self.assertRaises(sqlite3.Error):
+            public_list.import_public_list(
+                conn,
+                write_list_file(
+                    nwas=[{"code": "NEW-1"}],
+                    work_items=[{"name": "Task", "splits": [{"code": "NEW-1", "percent_basis_points": 10000}]}],
+                ),
+            )
+
+        rows = repository.list_nwas(conn, scope="public", include_obsolete=True)
+        self.assertEqual({row["code"]: row["is_obsolete"] for row in rows}, {"OLD-1": 0})
 
 
 if __name__ == "__main__":

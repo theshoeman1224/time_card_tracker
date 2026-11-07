@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+import tempfile
+from pathlib import Path
 
 from time_tracker import db
-from time_tracker.services import repository
+from time_tracker.services import public_list, repository
 
 
 def memory_conn() -> sqlite3.Connection:
@@ -21,3 +24,17 @@ def seed_basic(conn: sqlite3.Connection) -> tuple[str, str, str]:
     nwa_b = repository.save_nwa(conn, "B", "NWA B")
     work_item = repository.save_work_item(conn, "Build", "", [(nwa_a, 7000), (nwa_b, 3000)])
     return nwa_a, nwa_b, work_item
+
+
+def write_list_file(nwas, work_items) -> Path:
+    """Write a public list payload to a temp file and return its path."""
+    payload = {
+        "format_version": public_list.PUBLIC_LIST_FORMAT_VERSION,
+        "exported_at": "2026-08-28T09:00:00-04:00",
+        "nwas": nwas,
+        "work_items": work_items,
+    }
+    handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+    json.dump(payload, handle)
+    handle.close()
+    return Path(handle.name)

@@ -1,7 +1,10 @@
 import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
 
 from time_tracker import db
+from time_tracker.services import repository
 from tests.helpers import memory_conn
 
 
@@ -95,6 +98,63 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(versions, [1, db.SCHEMA_VERSION])
         settings = [row["key"] for row in conn.execute("SELECT key FROM settings ORDER BY key")]
         self.assertEqual(settings, ["allow_public_edits", "rounding_increment_minutes", "rounding_mode"])
+
+
+class SchemaConstraintTests(unittest.TestCase):
+    def test_invalid_work_day_status_rejected(self):
+        conn = memory_conn()
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO work_days(id, work_date, status) VALUES (?, ?, ?)",
+                ("test-id", "2026-01-01", "invalid_status"),
+            )
+
+    def test_valid_work_day_statuses_accepted(self):
+        conn = memory_conn()
+        for index, status in enumerate(("open", "reset")):
+            conn.execute(
+                "INSERT INTO work_days(id, work_date, status) VALUES (?, ?, ?)",
+                (f"day-{index}", f"2026-01-0{index + 1}", status),
+            )
+        conn.commit()
+        rows = conn.execute("SELECT status FROM work_days ORDER BY work_date").fetchall()
+        self.assertEqual([row["status"] for row in rows], ["open", "reset"])
+
+
+class ConnectTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmp.name) / "tracker.sqlite3"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_connect_creates_a_migrated_file_database(self):
+        conn = db.connect(self.path)
+        try:
+            self.assertTrue(self.path.exists())
+            version = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
+            self.assertEqual(version, db.SCHEMA_VERSION)
+            self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+            # Rows are addressable by column name.
+            self.assertEqual(conn.execute("SELECT 1 AS one").fetchone()["one"], 1)
+        finally:
+            conn.close()
+
+    def test_reconnect_keeps_data_and_does_not_reseed(self):
+        conn = db.connect(self.path)
+        repository.save_nwa(conn, "KEEP", "Persisted")
+        repository.set_setting(conn, "rounding_increment_minutes", "6")
+        conn.close()
+
+        conn = db.connect(self.path)
+        try:
+            self.assertEqual([row["code"] for row in repository.list_nwas(conn)], ["KEEP"])
+            self.assertEqual(repository.get_setting(conn, "rounding_increment_minutes"), "6")
+            versions = conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
+            self.assertEqual(versions, 1)
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

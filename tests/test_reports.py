@@ -1,8 +1,9 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from tests.helpers import memory_conn, seed_basic
-from time_tracker.services import reports, repository, tracking
+from tests.helpers import memory_conn, seed_basic, write_list_file
+from time_tracker.services import public_list, reports, repository, tracking
+from time_tracker.util.time_utils import now_local
 
 
 class ReportTests(unittest.TestCase):
@@ -91,6 +92,122 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["work_items"][0]["rounded_seconds"], 0)
         for row in report["nwas"]:
             self.assertEqual(row["rounded_seconds"], 0)
+
+
+def track(conn, work_item: str, start: str, end: str) -> None:
+    """Record one closed session between two fixed-offset timestamps."""
+    tracking.start_or_switch(conn, work_item, datetime.fromisoformat(start))
+    tracking.pause(conn, datetime.fromisoformat(end))
+
+
+class RoundingModeTests(unittest.TestCase):
+    def setUp(self):
+        self.conn = memory_conn()
+        _, _, self.work_item = seed_basic(self.conn)
+        repository.set_setting(self.conn, "rounding_increment_minutes", "15")
+
+    def test_mode_up_rounds_any_time_up_to_the_next_increment(self):
+        repository.set_setting(self.conn, "rounding_mode", "up")
+        track(self.conn, self.work_item, "2026-07-02T09:00:00-04:00", "2026-07-02T09:01:00-04:00")
+
+        row = reports.generate_report(self.conn, "daily", "2026-07-02")["work_items"][0]
+        self.assertEqual(row["rounded_seconds"], 900)
+
+    def test_mode_down_drops_partial_increments(self):
+        repository.set_setting(self.conn, "rounding_mode", "down")
+        track(self.conn, self.work_item, "2026-07-02T09:00:00-04:00", "2026-07-02T09:29:00-04:00")
+
+        row = reports.generate_report(self.conn, "daily", "2026-07-02")["work_items"][0]
+        self.assertEqual(row["rounded_seconds"], 900)
+
+    @unittest.expectedFailure  # Bug: one-decimal display shows 0.25 h as "0.3".
+    def test_quarter_hour_rounding_displays_exactly(self):
+        track(self.conn, self.work_item, "2026-07-02T09:00:00-04:00", "2026-07-02T09:15:00-04:00")
+
+        row = reports.generate_report(self.conn, "daily", "2026-07-02")["work_items"][0]
+        self.assertEqual(row["rounded_seconds"], 900)
+        self.assertEqual(row["rounded"], "0.25")
+
+
+class PeriodTests(unittest.TestCase):
+    def setUp(self):
+        self.conn = memory_conn()
+        _, _, self.work_item = seed_basic(self.conn)
+
+    def test_week_runs_monday_through_sunday(self):
+        for day in ("2026-06-28", "2026-06-29", "2026-07-05", "2026-07-06"):  # Sun, Mon, Sun, Mon
+            track(self.conn, self.work_item, f"{day}T09:00:00-04:00", f"{day}T10:00:00-04:00")
+
+        for anchor in ("2026-06-29", "2026-07-02", "2026-07-05"):
+            report = reports.generate_report(self.conn, "weekly", anchor)
+            self.assertEqual(report["dates"], ["2026-06-29", "2026-07-05"], anchor)
+            self.assertEqual(report["work_items"][0]["raw_seconds"], 7200, anchor)
+
+    @unittest.expectedFailure  # Bug: weekly rounds the period total, so it can't match daily timecards.
+    def test_weekly_rounded_total_equals_sum_of_daily_rounded_totals(self):
+        repository.set_setting(self.conn, "rounding_increment_minutes", "15")
+        days = ("2026-07-02", "2026-07-03", "2026-07-06")
+        for day in days:
+            track(self.conn, self.work_item, f"{day}T09:00:00-04:00", f"{day}T09:07:00-04:00")
+
+        daily = [reports.generate_report(self.conn, "daily", day)["work_items"][0]["rounded_seconds"] for day in days]
+        weekly = sum(
+            reports.generate_report(self.conn, "weekly", anchor)["work_items"][0]["rounded_seconds"]
+            for anchor in ("2026-07-02", "2026-07-06")
+        )
+        self.assertEqual(weekly, sum(daily))
+
+
+class ReportContentTests(unittest.TestCase):
+    def setUp(self):
+        self.conn = memory_conn()
+        self.nwa_a, self.nwa_b, self.work_item = seed_basic(self.conn)
+
+    def test_open_session_is_counted_up_to_now(self):
+        start = now_local() - timedelta(hours=1)
+        tracking.start_or_switch(self.conn, self.work_item, start)
+
+        report = reports.generate_report(self.conn, "daily", start.date().isoformat())
+
+        seconds = report["work_items"][0]["raw_seconds"]
+        self.assertGreaterEqual(seconds, 3600)
+        self.assertLess(seconds, 3660)
+
+    def test_removed_work_items_and_nwas_stay_in_reports(self):
+        track(self.conn, self.work_item, "2026-07-02T09:00:00-04:00", "2026-07-02T10:00:00-04:00")
+        repository.remove_work_item(self.conn, self.work_item)
+        repository.remove_nwa(self.conn, self.nwa_b)
+
+        report = reports.generate_report(self.conn, "daily", "2026-07-02")
+
+        self.assertEqual([row["name"] for row in report["work_items"]], ["Build"])
+        self.assertEqual([row["code"] for row in report["nwas"]], ["A", "B"])
+
+    def test_obsolete_public_entries_stay_in_reports(self):
+        public_list.import_public_list(
+            self.conn,
+            write_list_file(
+                nwas=[{"code": "PUB-A"}],
+                work_items=[{"name": "Review", "splits": [{"code": "PUB-A", "percent_basis_points": 10000}]}],
+            ),
+        )
+        item = repository.list_work_items(self.conn, scope="public")[0]["id"]
+        track(self.conn, item, "2026-07-02T09:00:00-04:00", "2026-07-02T10:00:00-04:00")
+        public_list.import_public_list(self.conn, write_list_file(nwas=[], work_items=[]))
+
+        report = reports.generate_report(self.conn, "daily", "2026-07-02")
+
+        self.assertEqual([row["name"] for row in report["work_items"]], ["Review"])
+        self.assertEqual([(row["code"], row["raw_seconds"]) for row in report["nwas"]], [("PUB-A", 3600)])
+
+    def test_later_split_edits_do_not_recharge_past_sessions(self):
+        track(self.conn, self.work_item, "2026-07-02T09:00:00-04:00", "2026-07-02T10:00:00-04:00")
+        repository.update_work_item(self.conn, self.work_item, "Build", "", [(self.nwa_a, 10000)])
+
+        report = reports.generate_report(self.conn, "daily", "2026-07-02")
+
+        by_code = {row["code"]: row["raw_seconds"] for row in report["nwas"]}
+        self.assertEqual(by_code, {"A": 2520, "B": 1080})
 
 
 if __name__ == "__main__":
