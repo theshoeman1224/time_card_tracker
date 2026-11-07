@@ -8,7 +8,7 @@ from time_tracker import constants
 from time_tracker.services import repository
 from time_tracker.ui.dialogs import NwaDialog
 from time_tracker.ui import theme
-from time_tracker.ui.widgets import scrolled_tree
+from time_tracker.ui.widgets import scrolled_tree, set_column_visible
 
 
 class SavedNwasTab(ttk.Frame):
@@ -53,6 +53,7 @@ class SavedNwasTab(ttk.Frame):
         self.refresh()
 
     def refresh(self) -> None:
+        set_column_visible(self.tree, "scope", not repository.scope_column_hidden(self.conn))
         selected = self.selected_id()
         self.tree.delete(*self.tree.get_children())
         self._rows.clear()

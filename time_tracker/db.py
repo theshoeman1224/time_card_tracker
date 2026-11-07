@@ -106,6 +106,7 @@ DEFAULT_SETTINGS = {
     "rounding_mode": "nearest",
     "allow_public_edits": "0",
     "theme": "light",
+    "hide_scope_column": "0",
 }
 
 

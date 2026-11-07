@@ -4,6 +4,7 @@ import json
 import sqlite3
 import uuid
 
+from time_tracker import constants
 from time_tracker.db import transaction
 from time_tracker.services.validation import validate_split_total
 from time_tracker.util.time_utils import iso, now_local
@@ -352,6 +353,11 @@ def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
     """Get a setting value by key, returning default if not found."""
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else default
+
+
+def scope_column_hidden(conn: sqlite3.Connection) -> bool:
+    """Whether the user chose to hide the Scope column on the list tabs."""
+    return get_setting(conn, constants.HIDE_SCOPE_SETTING, "0") == "1"
 
 
 def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:

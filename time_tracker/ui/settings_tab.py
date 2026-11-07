@@ -11,6 +11,7 @@ from time_tracker.paths import database_path, log_path
 from time_tracker.services import public_list, repository, tracking
 from time_tracker.ui import theme
 from time_tracker.ui.dialogs import ask_save_path, show_save_error
+from time_tracker.util import desktop
 
 
 class SettingsTab(ttk.Frame):
@@ -41,8 +42,27 @@ class SettingsTab(ttk.Frame):
         ttk.Checkbutton(settings, text="Dark mode", variable=self.dark_mode, command=self.save_theme).grid(
             row=0, column=4, padx=8, pady=8
         )
-        ttk.Label(settings, text=f"Database: {database_path()}").grid(row=1, column=0, columnspan=5, sticky="w", padx=10)
-        ttk.Label(settings, text=f"Log: {log_path()}").grid(row=2, column=0, columnspan=5, sticky="w", padx=10, pady=(0, 8))
+        self.hide_scope = tk.BooleanVar(value=repository.scope_column_hidden(self.conn))
+        ttk.Checkbutton(
+            settings, text=f"Hide {constants.SCOPE} column", variable=self.hide_scope, command=self.save_hide_scope
+        ).grid(row=0, column=5, padx=8, pady=8)
+
+        # Read-only entries so the paths can be selected and copied.
+        files = ttk.Frame(settings)
+        files.grid(row=1, column=0, columnspan=6, sticky="ew", padx=10, pady=(0, 8))
+        settings.columnconfigure(5, weight=1)
+        files.columnconfigure(1, weight=1)
+        self.path_entries: dict[str, ttk.Entry] = {}
+        for row, (label, path) in enumerate([("Database", database_path()), ("Log", log_path())]):
+            ttk.Label(files, text=label).grid(row=row, column=0, sticky="w", pady=2)
+            entry = ttk.Entry(files)
+            entry.insert(0, str(path))
+            entry.configure(state="readonly")
+            entry.grid(row=row, column=1, sticky="ew", padx=8, pady=2)
+            ttk.Button(files, text="Open folder", command=lambda p=path: self.open_folder(p.parent)).grid(
+                row=row, column=2, pady=2
+            )
+            self.path_entries[label] = entry
 
         public = ttk.LabelFrame(self, text="Public List")
         public.pack(fill="x", pady=(0, 10))
@@ -75,6 +95,17 @@ class SettingsTab(ttk.Frame):
         name = theme.DARK if self.dark_mode.get() else theme.LIGHT
         repository.set_setting(self.conn, theme.THEME_SETTING, name)
         theme.apply_theme(self.winfo_toplevel(), name)
+
+    def save_hide_scope(self) -> None:
+        repository.set_setting(self.conn, constants.HIDE_SCOPE_SETTING, "1" if self.hide_scope.get() else "0")
+        self.on_change()
+
+    def open_folder(self, folder: Path) -> None:
+        try:
+            desktop.open_folder(folder)
+        except OSError as exc:
+            logging.warning("Could not open folder %s: %s", folder, exc)
+            messagebox.showerror("Open Folder", f"Couldn't open the folder:\n{folder}\n\n{exc}", parent=self)
 
     def import_public_list(self) -> None:
         path = filedialog.askopenfilename(

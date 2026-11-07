@@ -132,7 +132,7 @@ class MigrationTests(unittest.TestCase):
         versions = [row["version"] for row in conn.execute("SELECT version FROM schema_migrations ORDER BY version")]
         self.assertEqual(versions, [1, db.SCHEMA_VERSION])
         settings = [row["key"] for row in conn.execute("SELECT key FROM settings ORDER BY key")]
-        self.assertEqual(settings, ["allow_public_edits", "rounding_increment_minutes", "rounding_mode", "theme"])
+        self.assertEqual(settings, ["allow_public_edits", "hide_scope_column", "rounding_increment_minutes", "rounding_mode", "theme"])
 
 
 class SchemaConstraintTests(unittest.TestCase):
