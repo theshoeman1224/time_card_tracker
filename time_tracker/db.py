@@ -105,6 +105,7 @@ DEFAULT_SETTINGS = {
     "rounding_increment_minutes": "15",
     "rounding_mode": "nearest",
     "allow_public_edits": "0",
+    "theme": "light",
 }
 
 

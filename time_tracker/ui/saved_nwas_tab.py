@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from time_tracker import constants
 from time_tracker.services import repository
 from time_tracker.ui.dialogs import NwaDialog
+from time_tracker.ui import theme
 from time_tracker.ui.widgets import scrolled_tree
 
 
@@ -45,7 +46,7 @@ class SavedNwasTab(ttk.Frame):
         self.tree.column("tags", width=160)
         self.tree.column("notes", width=300)
         self.tree.column("scope", width=80, anchor="center")
-        self.tree.tag_configure("obsolete", foreground="red")
+        theme.danger_tag(self.tree, "obsolete")
         tree_frame.pack(fill="both", expand=True)
 
         self._rows: dict[str, sqlite3.Row] = {}
