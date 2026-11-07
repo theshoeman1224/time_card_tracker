@@ -43,10 +43,23 @@ def current_open_session(conn: sqlite3.Connection) -> sqlite3.Row | None:
     ).fetchone()
 
 
+def _require_trackable(conn: sqlite3.Connection, work_item_id: str) -> None:
+    """Raise ValueError unless the work item exists and is still active."""
+    item = repository.get_work_item(conn, work_item_id)
+    if item is None:
+        raise ValueError("Work item not found.")
+    if item["is_deleted"]:
+        raise ValueError("This work item was removed and can no longer be tracked.")
+    if item["scope"] == "public" and item["is_obsolete"]:
+        raise ValueError("This work item was dropped from the public list and can no longer be tracked.")
+
+
 def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: datetime | None = None) -> str:
     """Start tracking a work item, or switch if already tracking something else. Returns session ID.
 
-    Commits on success; rolls back and re-raises on failure.
+    Raises ValueError for a removed or obsolete work item. Re-selecting the item
+    that is already running returns its session, even if the item has since been
+    dropped. Commits on success; rolls back and re-raises on failure.
     """
     current = current or now_local()
     now_text = iso(current)
@@ -54,6 +67,7 @@ def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: dateti
         active = current_open_session(conn)
         if active and active["work_item_id"] == work_item_id:
             return active["id"]
+        _require_trackable(conn, work_item_id)
         if active:
             conn.execute(
                 "UPDATE time_sessions SET end_at = ?, updated_at = ? WHERE id = ?",
@@ -200,6 +214,7 @@ def update_session(
         now_text = iso(now_local())
         snapshot = session["split_snapshot_json"]
         if work_item_id != session["work_item_id"]:
+            _require_trackable(conn, work_item_id)
             snapshot = repository.split_snapshot(conn, work_item_id)
         conn.execute(
             """

@@ -250,7 +250,6 @@ class UpdateSessionInvariantTests(unittest.TestCase):
 class StartInactiveWorkItemTests(unittest.TestCase):
     """The service, not just the UI, should refuse to track items the user can't see."""
 
-    @unittest.expectedFailure  # Bug: start_or_switch never checks is_deleted.
     def test_starting_a_removed_work_item_raises(self):
         conn = memory_conn()
         _, _, work_item = seed_basic(conn)
@@ -259,7 +258,6 @@ class StartInactiveWorkItemTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tracking.start_or_switch(conn, work_item, at("2026-07-02T09:00:00-04:00"))
 
-    @unittest.expectedFailure  # Bug: start_or_switch never checks is_obsolete; only the UI guards it.
     def test_starting_an_obsolete_public_work_item_raises(self):
         conn = memory_conn()
         public_list.import_public_list(
@@ -275,6 +273,27 @@ class StartInactiveWorkItemTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tracking.start_or_switch(conn, item, at("2026-07-02T09:00:00-04:00"))
 
+
+    def test_reselecting_the_running_item_after_it_is_removed_keeps_its_session(self):
+        conn = memory_conn()
+        _, _, work_item = seed_basic(conn)
+        session_id = tracking.start_or_switch(conn, work_item, at("2026-07-02T09:00:00-04:00"))
+        repository.remove_work_item(conn, work_item)
+
+        self.assertEqual(tracking.start_or_switch(conn, work_item, at("2026-07-02T09:30:00-04:00")), session_id)
+
+    def test_reassigning_a_session_to_a_removed_work_item_raises(self):
+        conn = memory_conn()
+        nwa_a, _, work_item = seed_basic(conn)
+        other = repository.save_work_item(conn, "Other", "", [(nwa_a, 10000)])
+        session_id = tracking.start_or_switch(conn, work_item, at("2026-07-02T09:00:00-04:00"))
+        tracking.pause(conn, at("2026-07-02T10:00:00-04:00"))
+        repository.remove_work_item(conn, other)
+
+        with self.assertRaises(ValueError):
+            tracking.update_session(
+                conn, session_id, "2026-07-02T09:00:00-04:00", "2026-07-02T10:00:00-04:00", other
+            )
 
 if __name__ == "__main__":
     unittest.main()

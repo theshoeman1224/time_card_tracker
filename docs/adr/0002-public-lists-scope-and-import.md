@@ -18,7 +18,7 @@ Design questions: how to represent public vs personal data, what an import repla
 
 **Auto-relink is structural.** Because upsert revives the *same row* for a surviving code, any work item split pointing at that row keeps working with no relinking step. Only codes that vanished leave stale splits behind, and there is no code to relink them to — the user edits the task manually, guided by red highlighting and a warning banner. An explicit relink pass would be dead code.
 
-**Historical sessions are already safe.** Session charging uses the split snapshot frozen at session start (`split_snapshot_json`), so imports cannot re-charge or break past sessions. An open session on a dropped item keeps running and charges by its snapshot; the item just can't be started again.
+**Historical sessions are already safe.** Session charging uses the split snapshot frozen at session start (`split_snapshot_json`), so imports cannot re-charge or break past sessions. An open session on a dropped item keeps running and charges by its snapshot; the item just can't be started again (`tracking.start_or_switch` refuses removed and obsolete items, so this holds outside the UI too).
 
 **Public entries are read-only by default**, with an `allow_public_edits` setting for managers who need to edit and re-export their list. Public NWAs removed by a user but present in a new file are revived by import.
 
