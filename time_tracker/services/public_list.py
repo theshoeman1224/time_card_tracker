@@ -2,7 +2,8 @@
 
 A public list is a charge-code catalog supplied by a team lead or manager. Only one
 public list is active at a time; importing a new one obsoletes the previous set.
-Personal NWAs and work items are never touched by an import. A personal work item
+Active personal NWAs and work items are never touched by an import; a removed
+personal NWA whose code the list reuses is claimed as the public entry. A personal work item
 split that points at a public NWA keeps working as long as the NWA's code survives
 the import (surviving NWAs keep their row identity); splits pointing at dropped
 codes go stale and the user relinks them by editing the task. Historical sessions
@@ -122,20 +123,22 @@ def import_public_list(conn: sqlite3.Connection, path: Path | str) -> dict[str, 
             (now,),
         )
 
-        # 2. Upsert the file's NWAs, matched by code.
+        # 2. Upsert the file's NWAs, matched by code. Codes are unique across scopes, so
+        #    a match is either a public row or a removed personal row (active personal
+        #    collisions were rejected above), which the public list claims.
         code_to_id: dict[str, str] = {}
         nwas_updated = 0
         for entry in nwa_entries:
-            existing = conn.execute(
-                "SELECT id FROM nwas WHERE code = ? AND scope = 'public'", (entry["code"],)
-            ).fetchone()
+            existing = conn.execute("SELECT id, scope FROM nwas WHERE code = ?", (entry["code"],)).fetchone()
             if existing:
                 nwa_id = existing["id"]
                 conn.execute(
-                    "UPDATE nwas SET name = ?, notes = ?, is_obsolete = 0, is_deleted = 0, updated_at = ? WHERE id = ?",
+                    "UPDATE nwas SET name = ?, notes = ?, scope = 'public', is_obsolete = 0, is_deleted = 0,"
+                    " updated_at = ? WHERE id = ?",
                     (entry["name"], entry["notes"], now, nwa_id),
                 )
-                nwas_updated += 1
+                if existing["scope"] == "public":
+                    nwas_updated += 1
             else:
                 nwa_id = repository.new_id()
                 conn.execute(
@@ -297,8 +300,10 @@ def _validate_file_contents(nwa_entries: list[dict], item_entries: list[dict]) -
 
 
 def _validate_against_database(conn: sqlite3.Connection, nwa_entries: list[dict]) -> None:
-    """Reject codes that would collide with existing personal NWAs."""
-    personal_codes = {row["code"] for row in conn.execute("SELECT code FROM nwas WHERE scope = 'personal'")}
+    """Reject codes that would collide with active personal NWAs (removed ones are claimed)."""
+    personal_codes = {
+        row["code"] for row in conn.execute("SELECT code FROM nwas WHERE scope = 'personal' AND is_deleted = 0")
+    }
     collisions = sorted({entry["code"] for entry in nwa_entries} & personal_codes)
     if collisions:
         raise ValueError(

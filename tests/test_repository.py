@@ -12,7 +12,6 @@ class NwaTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             repository.save_nwa(conn, "A", "Another A")
 
-    @unittest.expectedFailure  # Bug: removed codes stay UNIQUE, so re-adding says "already exists".
     def test_readding_a_removed_code_works(self):
         conn = memory_conn()
         nwa_id = repository.save_nwa(conn, "ABC", "First")
@@ -21,6 +20,16 @@ class NwaTests(unittest.TestCase):
         repository.save_nwa(conn, "ABC", "Second")
 
         self.assertEqual([row["code"] for row in repository.list_nwas(conn)], ["ABC"])
+        self.assertEqual(repository.list_nwas(conn)[0]["name"], "Second")
+
+    def test_removed_public_code_cannot_become_personal(self):
+        conn = memory_conn()
+        nwa_id = repository.save_nwa(conn, "PUB", "Public", scope="public")
+        repository.remove_nwa(conn, nwa_id)
+
+        with self.assertRaises(ValueError) as ctx:
+            repository.save_nwa(conn, "PUB", "Mine")
+        self.assertIn("removed public NWA", str(ctx.exception))
 
     def test_search_by_tag_finds_the_nwa(self):
         conn = memory_conn()

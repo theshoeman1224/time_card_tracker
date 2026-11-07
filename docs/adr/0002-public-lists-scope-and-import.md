@@ -26,5 +26,6 @@ Design questions: how to represent public vs personal data, what an import repla
 
 - Obsolete public work items are hidden from the active list, but stay visible in red for the rest of the app session after an import (until-restart display), so users can see what was dropped.
 - Exported files are self-contained: every split references a code defined in the same file. Export refuses to run while a public work item still references an obsolete public NWA.
-- A personal NWA's code colliding with an imported public code aborts the import with a message naming the code; personal data is never mutated or claimed.
+- An active personal NWA's code colliding with an imported public code aborts the import with a message naming the code; active personal data is never mutated or claimed.
+- A *removed* personal NWA whose code the list reuses is claimed: its row becomes the public entry (codes are unique across scopes, so the alternative is an import the user can never complete). Splits still pointing at that row now charge the public NWA of the same code; sessions keep their snapshots. Likewise, adding an NWA with a removed code of the same scope revives the removed row.
 - Schema version 2 introduced the first incremental migration step (`MIGRATION_STEPS` in `db.py`); steps must stay idempotent because `SCHEMA_SQL` runs before them on every open.

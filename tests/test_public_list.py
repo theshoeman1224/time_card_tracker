@@ -508,15 +508,16 @@ class ImportEdgeCaseTests(unittest.TestCase):
         tags = repository.list_nwas(conn, scope="public")[0]["tags"]
         self.assertEqual(sorted(tags.split(", ")), ["y", "z"])
 
-    @unittest.expectedFailure  # Bug: removed personal NWAs still count as collisions (and keep the code UNIQUE).
     def test_import_over_a_removed_personal_nwa_succeeds(self):
         conn = memory_conn()
         personal = repository.save_nwa(conn, "PUB-A", "My old copy")
         repository.remove_nwa(conn, personal)
 
-        public_list.import_public_list(conn, write_list_file(nwas=[{"code": "PUB-A"}], work_items=[]))
+        report = public_list.import_public_list(conn, write_list_file(nwas=[{"code": "PUB-A"}], work_items=[]))
 
         self.assertEqual([row["code"] for row in repository.list_nwas(conn, scope="public")], ["PUB-A"])
+        self.assertEqual(repository.list_nwas(conn, scope="personal"), [])
+        self.assertEqual((report["nwas_added"], report["nwas_updated"]), (1, 0))
 
 
 class ImportAtomicityTests(unittest.TestCase):

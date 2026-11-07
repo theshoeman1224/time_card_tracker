@@ -64,7 +64,10 @@ def save_nwa(
 ) -> str:
     """Create or update an NWA. Returns the NWA ID. Commits on success; rolls back and re-raises on failure.
 
-    scope only applies on create; an update never changes an NWA's scope.
+    scope only applies on create; an update never changes an NWA's scope. Creating
+    an NWA whose code belongs to a removed NWA of the same scope revives that row,
+    so removed codes can be reused. Raises sqlite3.IntegrityError when the code is
+    already active.
     """
     now = iso(now_local())
     code = code.strip()
@@ -78,11 +81,26 @@ def save_nwa(
             )
             saved_id = nwa_id
         else:
-            saved_id = new_id()
-            conn.execute(
-                "INSERT INTO nwas(id, code, name, notes, scope, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (saved_id, code, name.strip(), notes.strip(), scope, now, now),
-            )
+            removed = conn.execute(
+                "SELECT id, scope FROM nwas WHERE code = ? AND is_deleted = 1", (code,)
+            ).fetchone()
+            if removed and removed["scope"] != scope:
+                raise ValueError(
+                    f"NWA code '{code}' belongs to a removed {removed['scope']} NWA and can't be "
+                    f"reused for a {scope} one."
+                )
+            if removed:
+                saved_id = removed["id"]
+                conn.execute(
+                    "UPDATE nwas SET name = ?, notes = ?, is_deleted = 0, is_obsolete = 0, updated_at = ? WHERE id = ?",
+                    (name.strip(), notes.strip(), now, saved_id),
+                )
+            else:
+                saved_id = new_id()
+                conn.execute(
+                    "INSERT INTO nwas(id, code, name, notes, scope, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (saved_id, code, name.strip(), notes.strip(), scope, now, now),
+                )
         replace_nwa_tags(conn, saved_id, tags)
         return saved_id
 
