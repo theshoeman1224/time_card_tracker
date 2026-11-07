@@ -157,7 +157,6 @@ class PeriodTests(unittest.TestCase):
             self.assertEqual(report["dates"], ["2026-06-29", "2026-07-05"], anchor)
             self.assertEqual(report["work_items"][0]["raw_seconds"], 7200, anchor)
 
-    @unittest.expectedFailure  # Bug: weekly rounds the period total, so it can't match daily timecards.
     def test_weekly_rounded_total_equals_sum_of_daily_rounded_totals(self):
         repository.set_setting(self.conn, "rounding_increment_minutes", "15")
         days = ("2026-07-02", "2026-07-03", "2026-07-06")
@@ -171,6 +170,20 @@ class PeriodTests(unittest.TestCase):
         )
         self.assertEqual(weekly, sum(daily))
 
+
+    def test_weekly_nwa_rounded_totals_equal_sum_of_daily(self):
+        repository.set_setting(self.conn, "rounding_increment_minutes", "15")
+        days = ("2026-07-02", "2026-07-03")
+        for day in days:
+            track(self.conn, self.work_item, f"{day}T09:00:00-04:00", f"{day}T09:50:00-04:00")
+
+        def by_code(report):
+            return {row["code"]: row["rounded_seconds"] for row in report["nwas"]}
+
+        daily = [by_code(reports.generate_report(self.conn, "daily", day)) for day in days]
+        weekly = by_code(reports.generate_report(self.conn, "weekly", "2026-07-02"))
+        self.assertEqual(weekly, {code: sum(d[code] for d in daily) for code in weekly})
+        self.assertEqual(sum(weekly.values()), 2 * 2700)
 
 class ReportContentTests(unittest.TestCase):
     def setUp(self):
