@@ -176,8 +176,8 @@ class WorkItemDialog(BaseDialog):
             self.name.insert(0, initial["name"])
             self.description.insert("1.0", initial["description"] or "")
             for split in repository.get_work_item_splits(conn, initial["id"]):
-                # Splits on obsolete public NWAs show red: they need relinking.
-                stale = bool(split["is_obsolete"])
+                # Splits on removed or obsolete NWAs show red: they need relinking.
+                stale = bool(split["is_obsolete"] or split["is_deleted"])
                 item = self.splits.insert(
                     "",
                     "end",

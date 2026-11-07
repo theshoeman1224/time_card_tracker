@@ -136,8 +136,8 @@ class WorkItemsTab(ttk.Frame):
         relink_needed = stale_ids - obsolete_item_ids
         if relink_needed:
             alerts.append(
-                f"{len(relink_needed)} task(s) reference charge codes dropped from the public list. "
-                "Edit each task to relink its splits to the new list."
+                f"{len(relink_needed)} task(s) reference charge codes that were removed or dropped "
+                "from the public list. Edit each task to relink its splits."
             )
         if obsolete_shown:
             alerts.append(
