@@ -407,8 +407,13 @@ class ImportTests(unittest.TestCase):
             [("A", "personal"), ("B", "personal")],
         )
         self.assertEqual(repository.get_work_item(conn, personal_item)["scope"], "personal")
-        self.assertEqual(len(repository.get_work_item_splits(conn, personal_item)), 2)
-        self.assertEqual({nwa_a, nwa_b}, {nwa_a, nwa_b})
+        self.assertEqual(
+            [
+                (row["nwa_id"], row["percent_basis_points"])
+                for row in repository.get_work_item_splits(conn, personal_item)
+            ],
+            [(nwa_a, 7000), (nwa_b, 3000)],
+        )
 
     def test_import_preserves_open_session_charging(self):
         conn = memory_conn()

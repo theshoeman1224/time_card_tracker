@@ -180,21 +180,26 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     committed until the outermost block finishes. (A bare `with conn:` would
     commit the caller's half-finished transaction on exit.)
     """
+    # Finish in `finally` so the transaction is always closed, even if the
+    # generator is closed early instead of resumed.
+    succeeded = False
     if not conn.in_transaction:
         conn.execute("BEGIN")
         try:
             yield conn
-        except BaseException:
-            conn.rollback()
-            raise
-        conn.commit()
+            succeeded = True
+        finally:
+            if succeeded:
+                conn.commit()
+            else:
+                conn.rollback()
         return
     savepoint = f"sp_{uuid.uuid4().hex}"
     conn.execute(f"SAVEPOINT {savepoint}")
     try:
         yield conn
-    except BaseException:
-        conn.execute(f"ROLLBACK TO {savepoint}")
+        succeeded = True
+    finally:
+        if not succeeded:
+            conn.execute(f"ROLLBACK TO {savepoint}")
         conn.execute(f"RELEASE {savepoint}")
-        raise
-    conn.execute(f"RELEASE {savepoint}")
