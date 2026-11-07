@@ -170,7 +170,6 @@ class SwitchAcrossMidnightTests(unittest.TestCase):
 
         self.assertEqual(session_work_date(self.conn, first), "2026-07-02")
 
-    @unittest.expectedFailure  # Bug: the new session inherits the old session's work day.
     def test_switch_after_midnight_files_new_session_under_the_new_day(self):
         tracking.start_or_switch(self.conn, self.work_item, at("2026-07-02T23:00:00-04:00"))
         second = tracking.start_or_switch(self.conn, self.other, at("2026-07-03T09:00:00-04:00"))

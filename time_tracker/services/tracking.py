@@ -59,9 +59,9 @@ def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: dateti
                 "UPDATE time_sessions SET end_at = ?, updated_at = ? WHERE id = ?",
                 (now_text, now_text, active["id"]),
             )
-            work_day_id = active["work_day_id"]
-        else:
-            work_day_id = get_or_create_work_day(conn, current)
+        # A session belongs to the day it starts on, even when the session it
+        # replaces started the day before.
+        work_day_id = get_or_create_work_day(conn, current)
         session_id = repository.new_id()
         snapshot = repository.split_snapshot(conn, work_item_id)
         conn.execute(
