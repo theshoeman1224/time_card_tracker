@@ -69,10 +69,7 @@ def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: dateti
             return active["id"]
         _require_trackable(conn, work_item_id)
         if active:
-            conn.execute(
-                "UPDATE time_sessions SET end_at = ?, updated_at = ? WHERE id = ?",
-                (now_text, now_text, active["id"]),
-            )
+            _close_session(conn, active, now_text)
         # A session belongs to the day it starts on, even when the session it
         # replaces started the day before.
         work_day_id = get_or_create_work_day(conn, current)
@@ -90,17 +87,34 @@ def start_or_switch(conn: sqlite3.Connection, work_item_id: str, current: dateti
         return session_id
 
 
+def _close_session(conn: sqlite3.Connection, session: sqlite3.Row, end_at: str) -> None:
+    """End an open session at end_at, or discard it if that isn't after its start.
+
+    Times are stored to the second, so pausing or switching in the same second
+    a session started would give it zero length, which the schema rejects. Such
+    a session holds no time, so it's deleted. The same applies if the clock has
+    moved back since the session started. Times are compared as datetimes, not
+    text, because the two may carry different UTC offsets.
+    """
+    if parse_iso(end_at) <= parse_iso(session["start_at"]):
+        conn.execute("DELETE FROM time_sessions WHERE id = ?", (session["id"],))
+        return
+    conn.execute(
+        "UPDATE time_sessions SET end_at = ?, updated_at = ? WHERE id = ?",
+        (end_at, end_at, session["id"]),
+    )
+
+
 def pause(conn: sqlite3.Connection, current: datetime | None = None) -> None:
-    """Close the currently open session. Silent no-op if no session is open."""
+    """Close the currently open session. Silent no-op if no session is open.
+
+    A session paused in the same second it started is discarded (see _close_session).
+    """
     with transaction(conn):
         active = current_open_session(conn)
         if not active:
             return
-        now_text = iso(current or now_local())
-        conn.execute(
-            "UPDATE time_sessions SET end_at = ?, updated_at = ? WHERE id = ?",
-            (now_text, now_text, active["id"]),
-        )
+        _close_session(conn, active, iso(current or now_local()))
 
 
 def reset_day(conn: sqlite3.Connection, current: datetime | None = None) -> None:

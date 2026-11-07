@@ -12,7 +12,7 @@ Domain glossary for the time card tracker. Terms are added as the domain model s
 - **Split snapshot** — a frozen JSON copy of a work item's splits taken when a session starts (or when its work item changes), so historical sessions are charged by the splits in force at the time.
 - **Work day** — the calendar day a session *starts* on; sessions that span midnight belong to the starting day.
 - **Rounded hours** — a time rounded to the rounding increment (setting, in minutes) and shown as decimal hours: one decimal place when the increment is a multiple of 6 minutes (exact tenths), otherwise two (15 minutes = 0.25). Rounding applies per work item per work day; weekly and monthly reports sum the daily rounded values, so they always match the daily reports they cover. Each work item's daily time, raw and rounded, is split across its NWAs by largest remainder, so NWA totals always equal work item totals.
-- **Session** — a span of tracked time on one work item within a work day. At most one session is open at a time; an open session is treated as ending "now" whenever its elapsed time is needed.
+- **Session** — a span of tracked time on one work item within a work day. At most one session is open at a time; an open session is treated as ending "now" whenever its elapsed time is needed. Times are stored to the second, so a session paused, switched away from, or reset in the same second it started holds no time and is discarded rather than saved with zero length.
 
 ## Architecture terms
 
