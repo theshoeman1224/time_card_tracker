@@ -88,24 +88,29 @@ def round_seconds(seconds: float, increment_minutes: int, mode: str = "nearest")
     return int(math.floor(seconds / increment + 0.5) * increment)
 
 
-def apportion_rounded(rounded_total_seconds: int, raw_parts: list[float], increment_minutes: int) -> list[int]:
-    """Split a rounded total across parts in whole increments (largest remainder).
+def apportion(total_seconds: int, raw_parts: list[float], unit_seconds: int = 1) -> list[int]:
+    """Split a total across parts in whole units (largest remainder).
 
-    Floors each part to the increment, then hands leftover increments to the
-    parts with the biggest fractional remainder, so the results sum to
-    rounded_total_seconds exactly. Ties break by part order, so callers should
-    pass parts in a deterministic order.
+    Floors each part to the unit, then hands leftover units to the parts with
+    the biggest fractional remainder, so the results sum to total_seconds
+    exactly. Ties break by part order, so callers should pass parts in a
+    deterministic order.
     """
-    increment = max(1, int(increment_minutes)) * 60
-    counts = [int(part // increment) for part in raw_parts]
-    remaining = max(0, int(rounded_total_seconds) // increment - sum(counts))
+    unit = max(1, int(unit_seconds))
+    counts = [int(part // unit) for part in raw_parts]
+    remaining = max(0, int(total_seconds) // unit - sum(counts))
     order = sorted(
         range(len(raw_parts)),
-        key=lambda i: (-(raw_parts[i] - counts[i] * increment), i),
+        key=lambda i: (-(raw_parts[i] - counts[i] * unit), i),
     )
     for i in order[:remaining]:
         counts[i] += 1
-    return [count * increment for count in counts]
+    return [count * unit for count in counts]
+
+
+def apportion_rounded(rounded_total_seconds: int, raw_parts: list[float], increment_minutes: int) -> list[int]:
+    """Split a rounded total across parts in whole rounding increments (see apportion)."""
+    return apportion(rounded_total_seconds, raw_parts, max(1, int(increment_minutes)) * 60)
 
 
 def week_bounds(day: datetime) -> tuple[str, str]:

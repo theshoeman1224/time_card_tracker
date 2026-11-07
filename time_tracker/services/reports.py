@@ -7,6 +7,7 @@ from datetime import datetime
 
 from time_tracker.services import repository, tracking
 from time_tracker.util.time_utils import (
+    apportion,
     apportion_rounded,
     decimal_hours,
     hour_places,
@@ -89,10 +90,11 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
 
     # Round each work item's day, then charge that rounded time across its NWAs
     # (largest remainder), so NWA rounded times always sum to the work item
-    # rounded times instead of each NWA row rounding independently.
+    # rounded times instead of each NWA row rounding independently. Raw time is
+    # split the same way in whole seconds, so raw NWA totals match too.
     item_raw: dict[tuple[str, str], int] = defaultdict(int)
     item_rounded: dict[tuple[str, str], int] = defaultdict(int)
-    nwa_raw: dict[tuple[str, str], float] = defaultdict(float)
+    nwa_raw: dict[tuple[str, str], int] = defaultdict(int)
     nwa_rounded: dict[tuple[str, str], int] = defaultdict(int)
     for day_key in sorted(day_items):
         _, item_key = day_key
@@ -102,10 +104,12 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
         item_rounded[item_key] += rounded_seconds
         parts = day_item_parts[day_key]
         ordered = sorted(parts)
-        apportioned = apportion_rounded(rounded_seconds, [parts[key] for key in ordered], increment)
-        for key, nwa_seconds in zip(ordered, apportioned):
+        raw_parts = [parts[key] for key in ordered]
+        raw_apportioned = apportion(seconds, raw_parts)
+        rounded_apportioned = apportion_rounded(rounded_seconds, raw_parts, increment)
+        for key, raw_seconds, nwa_seconds in zip(ordered, raw_apportioned, rounded_apportioned):
+            nwa_raw[key] += raw_seconds
             nwa_rounded[key] += nwa_seconds
-            nwa_raw[key] += parts[key]
 
     work_item_rows = []
     for (item_id, name), seconds in sorted(item_raw.items(), key=lambda item: item[0][1].lower()):
@@ -128,8 +132,8 @@ def generate_report(conn: sqlite3.Connection, period: str, anchor_date: str) -> 
             {
                 "id": nwa_id,
                 "code": code,
-                "raw_seconds": int(seconds),
-                "raw": human_duration(int(seconds)),
+                "raw_seconds": seconds,
+                "raw": human_duration(seconds),
                 "rounded_seconds": rounded_seconds,
                 "rounded": decimal_hours(rounded_seconds, places),
             }
