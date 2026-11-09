@@ -71,7 +71,7 @@ def fit_columns(tree: ttk.Treeview) -> None:
     stretchy = [column for column in columns if tree.column(column, "stretch")]
     if gap > 0:
         # Spare width (e.g. after hiding a column) goes to columns in proportion to their width.
-        limits = {column: gap for column in stretchy}
+        limits = dict.fromkeys(stretchy, gap)
         weights = {column: widths[column] for column in stretchy}
     else:
         # Shrink columns in proportion to how far each can go before its minimum width.

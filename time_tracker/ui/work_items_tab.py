@@ -105,38 +105,42 @@ class WorkItemsTab(ttk.Frame):
         selected = self.selected_work_item_id()
         self.items.delete(*self.items.get_children())
         self._work_rows.clear()
+        stale_ids = repository.stale_work_item_ids(self.conn)
+        obsolete_item_ids: set[str] = set()
+        for row in self._rows_to_show():
+            obsolete = row["scope"] == "public" and row["is_obsolete"]
+            if obsolete:
+                obsolete_item_ids.add(row["id"])
+            tags = ("stale",) if obsolete or row["id"] in stale_ids else ()
+            self.items.insert("", "end", iid=row["id"], values=self._item_values(row, active), tags=tags)
+            self._work_rows[row["id"]] = row
+        self._update_alerts(stale_ids, obsolete_item_ids)
+        if selected and selected in self._work_rows:
+            self.items.selection_set(selected)
+
+    def _rows_to_show(self) -> list[sqlite3.Row]:
+        """Active work items plus public items obsoleted by an import this session."""
         rows = list(repository.list_work_items(self.conn))
         shown = {row["id"] for row in rows}
-        for item_id in sorted(self._session_obsolete_items):
-            if item_id in shown:
-                continue
+        for item_id in sorted(self._session_obsolete_items - shown):
             row = repository.get_work_item(self.conn, item_id)
             if row and row["scope"] == "public" and row["is_obsolete"] and not row["is_deleted"]:
                 rows.append(row)
+        return rows
 
-        stale_ids = repository.stale_work_item_ids(self.conn)
-        obsolete_shown = 0
-        obsolete_item_ids: set[str] = set()
-        for row in rows:
-            splits = repository.get_work_item_splits(self.conn, row["id"])
-            split_text = ", ".join(f"{split['code']} {split['percent_basis_points'] / 100:.0f}%" for split in splits)
-            name = row["name"]
-            # Mark the currently tracked item.
-            if active and active["work_item_id"] == row["id"]:
-                name = f"* {name}"
-            scope = constants.PUBLIC if row["scope"] == "public" else constants.PERSONAL
-            tags: tuple[str, ...] = ()
-            if row["scope"] == "public" and row["is_obsolete"]:
-                tags = ("stale",)
-                obsolete_shown += 1
-                obsolete_item_ids.add(row["id"])
-            elif row["id"] in stale_ids:
-                tags = ("stale",)
-            self.items.insert(
-                "", "end", iid=row["id"], values=(name, split_text, scope), tags=tags
-            )
-            self._work_rows[row["id"]] = row
+    def _item_values(self, row: sqlite3.Row, active: sqlite3.Row | None) -> tuple[str, str, str]:
+        """Name, split summary, and scope cells for one work item row."""
+        splits = repository.get_work_item_splits(self.conn, row["id"])
+        split_text = ", ".join(f"{split['code']} {split['percent_basis_points'] / 100:.0f}%" for split in splits)
+        name = row["name"]
+        # Mark the currently tracked item.
+        if active and active["work_item_id"] == row["id"]:
+            name = f"* {name}"
+        scope = constants.PUBLIC if row["scope"] == "public" else constants.PERSONAL
+        return name, split_text, scope
 
+    def _update_alerts(self, stale_ids: set[str], obsolete_item_ids: set[str]) -> None:
+        """Show or hide the banner explaining red (stale or obsoleted) rows."""
         alerts = []
         relink_needed = stale_ids - obsolete_item_ids
         if relink_needed:
@@ -144,9 +148,9 @@ class WorkItemsTab(ttk.Frame):
                 f"{len(relink_needed)} task(s) reference charge codes that were removed or dropped "
                 "from the public list. Edit each task to relink its splits."
             )
-        if obsolete_shown:
+        if obsolete_item_ids:
             alerts.append(
-                f"{obsolete_shown} public task(s) were dropped by a public list import and are "
+                f"{len(obsolete_item_ids)} public task(s) were dropped by a public list import and are "
                 "shown in red until restart."
             )
         # The banner takes vertical space only when it has something to say,
@@ -157,9 +161,6 @@ class WorkItemsTab(ttk.Frame):
             self.alert_label.pack(fill="x", pady=(0, 4), before=self._items_frame)
         else:
             self.alert_label.pack_forget()
-
-        if selected and selected in self._work_rows:
-            self.items.selection_set(selected)
 
     def on_public_list_imported(self, report: dict) -> None:
         """Called after a public list import so obsoleted items stay visible until restart."""

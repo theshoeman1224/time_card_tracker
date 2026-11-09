@@ -328,8 +328,9 @@ class StartInactiveWorkItemTests(unittest.TestCase):
         _, _, work_item = seed_basic(conn)
         repository.remove_work_item(conn, work_item)
 
+        start = at("2026-07-02T09:00:00-04:00")
         with self.assertRaises(ValueError):
-            tracking.start_or_switch(conn, work_item, at("2026-07-02T09:00:00-04:00"))
+            tracking.start_or_switch(conn, work_item, start)
 
     def test_starting_an_obsolete_public_work_item_raises(self):
         conn = memory_conn()
@@ -343,8 +344,9 @@ class StartInactiveWorkItemTests(unittest.TestCase):
         item = repository.list_work_items(conn, scope="public")[0]["id"]
         public_list.import_public_list(conn, write_list_file(nwas=[], work_items=[]))
 
+        start = at("2026-07-02T09:00:00-04:00")
         with self.assertRaises(ValueError):
-            tracking.start_or_switch(conn, item, at("2026-07-02T09:00:00-04:00"))
+            tracking.start_or_switch(conn, item, start)
 
 
     def test_reselecting_the_running_item_after_it_is_removed_keeps_its_session(self):

@@ -13,6 +13,9 @@ from time_tracker.ui import theme
 from time_tracker.ui.dialogs import ask_save_path, show_save_error
 from time_tracker.util import desktop
 
+# Frame label and dialog title for the public list controls.
+PUBLIC_LIST_TITLE = "Public List"
+
 
 class SettingsTab(ttk.Frame):
     """Rounding/reset settings and public list import/export."""
@@ -64,7 +67,7 @@ class SettingsTab(ttk.Frame):
             )
             self.path_entries[label] = entry
 
-        public = ttk.LabelFrame(self, text="Public List")
+        public = ttk.LabelFrame(self, text=PUBLIC_LIST_TITLE)
         public.pack(fill="x", pady=(0, 10))
         ttk.Label(public, text="One shared team list at a time; importing a new one replaces it.").pack(
             side="left", padx=(10, 4), pady=8
@@ -118,12 +121,12 @@ class SettingsTab(ttk.Frame):
         try:
             report = public_list.import_public_list(self.conn, Path(path))
         except ValueError as exc:
-            messagebox.showerror("Public List", str(exc), parent=self)
+            messagebox.showerror(PUBLIC_LIST_TITLE, str(exc), parent=self)
             return
         except sqlite3.Error as exc:
             logging.exception("Public list import failed")
             messagebox.showerror(
-                "Public List",
+                PUBLIC_LIST_TITLE,
                 f"The public list couldn't be saved, so nothing was changed:\n{exc}",
                 parent=self,
             )
@@ -146,9 +149,9 @@ class SettingsTab(ttk.Frame):
                 "and must be relinked:"
             )
             lines.extend(f"  - {row['work_item_name']} ({row['nwa_code']})" for row in stale)
-            messagebox.showwarning("Public List", "\n".join(lines), parent=self)
+            messagebox.showwarning(PUBLIC_LIST_TITLE, "\n".join(lines), parent=self)
         else:
-            messagebox.showinfo("Public List", "\n".join(lines), parent=self)
+            messagebox.showinfo(PUBLIC_LIST_TITLE, "\n".join(lines), parent=self)
 
     def export_public_list(self) -> None:
         path = ask_save_path(self, ".json")
@@ -157,13 +160,13 @@ class SettingsTab(ttk.Frame):
         try:
             summary = public_list.export_public_list(self.conn, path)
         except ValueError as exc:
-            messagebox.showerror("Public List", str(exc), parent=self)
+            messagebox.showerror(PUBLIC_LIST_TITLE, str(exc), parent=self)
             return
         except OSError as exc:
-            show_save_error(self, "Public List", path, exc)
+            show_save_error(self, PUBLIC_LIST_TITLE, path, exc)
             return
         messagebox.showinfo(
-            "Public List",
+            PUBLIC_LIST_TITLE,
             f"Exported {summary['nwa_count']} NWA(s) and {summary['work_item_count']} work item(s) to {path}",
             parent=self,
         )

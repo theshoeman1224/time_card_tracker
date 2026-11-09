@@ -444,10 +444,9 @@ class ImportTests(unittest.TestCase):
             conn, write_list_file(nwas=[{"code": "PUB-A"}], work_items=[])
         )
 
+        path = write_list_file(nwas=[{"code": "PUB-A"}, {"code": nwa_a and "A"}], work_items=[])
         with self.assertRaises(ValueError) as ctx:
-            public_list.import_public_list(
-                conn, write_list_file(nwas=[{"code": "PUB-A"}, {"code": nwa_a and "A"}], work_items=[])
-            )
+            public_list.import_public_list(conn, path)
         self.assertIn("personal", str(ctx.exception))
 
         # Rollback: the old public set is untouched and nothing new was added.
@@ -459,8 +458,9 @@ class ImportTests(unittest.TestCase):
         handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         handle.write("{not json")
         handle.close()
+        path = Path(handle.name)
         with self.assertRaises(ValueError) as ctx:
-            public_list.import_public_list(conn, Path(handle.name))
+            public_list.import_public_list(conn, path)
         self.assertIn("not valid JSON", str(ctx.exception))
 
     def test_import_wrong_format_version_raises(self):
@@ -475,56 +475,42 @@ class ImportTests(unittest.TestCase):
 
     def test_import_duplicate_codes_raise(self):
         conn = memory_conn()
+        path = write_list_file(nwas=[{"code": "X"}, {"code": "X"}], work_items=[])
         with self.assertRaises(ValueError) as ctx:
-            public_list.import_public_list(
-                conn, write_list_file(nwas=[{"code": "X"}, {"code": "X"}], work_items=[])
-            )
+            public_list.import_public_list(conn, path)
         self.assertIn("duplicate NWA codes", str(ctx.exception))
 
     def test_import_duplicate_work_item_names_raise(self):
         conn = memory_conn()
+        path = write_list_file(
+            nwas=[{"code": "X"}],
+            work_items=[
+                {"name": "Same", "splits": [{"code": "X", "percent_basis_points": 10000}]},
+                {"name": "Same", "splits": [{"code": "X", "percent_basis_points": 10000}]},
+            ],
+        )
         with self.assertRaises(ValueError) as ctx:
-            public_list.import_public_list(
-                conn,
-                write_list_file(
-                    nwas=[{"code": "X"}],
-                    work_items=[
-                        {"name": "Same", "splits": [{"code": "X", "percent_basis_points": 10000}]},
-                        {"name": "Same", "splits": [{"code": "X", "percent_basis_points": 10000}]},
-                    ],
-                ),
-            )
+            public_list.import_public_list(conn, path)
         self.assertIn("duplicate work item names", str(ctx.exception))
 
     def test_import_missing_nwa_reference_raises(self):
         conn = memory_conn()
+        path = write_list_file(
+            nwas=[{"code": "X"}],
+            work_items=[{"name": "Review", "splits": [{"code": "Y", "percent_basis_points": 10000}]}],
+        )
         with self.assertRaises(ValueError) as ctx:
-            public_list.import_public_list(
-                conn,
-                write_list_file(
-                    nwas=[{"code": "X"}],
-                    work_items=[{"name": "Review", "splits": [{"code": "Y", "percent_basis_points": 10000}]}],
-                ),
-            )
+            public_list.import_public_list(conn, path)
         self.assertIn("not defined", str(ctx.exception))
 
     def test_import_bad_split_total_raises(self):
         conn = memory_conn()
+        path = write_list_file(
+            nwas=[{"code": "X"}],
+            work_items=[{"name": "Review", "splits": [{"code": "X", "percent_basis_points": 7000}]}],
+        )
         with self.assertRaises(ValueError) as ctx:
-            public_list.import_public_list(
-                conn,
-                write_list_file(
-                    nwas=[{"code": "X"}],
-                    work_items=[
-                        {
-                            "name": "Review",
-                            "splits": [
-                                {"code": "X", "percent_basis_points": 7000},
-                            ],
-                        }
-                    ],
-                ),
-            )
+            public_list.import_public_list(conn, path)
         self.assertIn("100%", str(ctx.exception))
 
     def test_import_empty_file_clears_public_list(self):
@@ -579,14 +565,12 @@ class ImportAtomicityTests(unittest.TestCase):
             "BEGIN SELECT RAISE(ABORT, 'forced failure'); END"
         )
 
+        path = write_list_file(
+            nwas=[{"code": "NEW-1"}],
+            work_items=[{"name": "Task", "splits": [{"code": "NEW-1", "percent_basis_points": 10000}]}],
+        )
         with self.assertRaises(sqlite3.Error):
-            public_list.import_public_list(
-                conn,
-                write_list_file(
-                    nwas=[{"code": "NEW-1"}],
-                    work_items=[{"name": "Task", "splits": [{"code": "NEW-1", "percent_basis_points": 10000}]}],
-                ),
-            )
+            public_list.import_public_list(conn, path)
 
         rows = repository.list_nwas(conn, scope="public", include_obsolete=True)
         self.assertEqual({row["code"]: row["is_obsolete"] for row in rows}, {"OLD-1": 0})

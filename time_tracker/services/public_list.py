@@ -217,16 +217,7 @@ def import_public_list(conn: sqlite3.Connection, path: Path | str) -> dict[str, 
 
 def _load_public_list_file(path: Path | str) -> dict[str, object]:
     """Read and structurally validate a public list JSON file. Raises ValueError."""
-    try:
-        raw = Path(path).read_text(encoding="utf-8")
-    except OSError as exc:
-        raise ValueError(f"Could not read the public list file: {exc}") from exc
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"The public list file is not valid JSON: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("The public list file must contain a JSON object.")
+    payload = _read_json_object(path)
     if payload.get("format_version") != PUBLIC_LIST_FORMAT_VERSION:
         raise ValueError(
             f"Unsupported public list format version: {payload.get('format_version')!r}. "
@@ -238,39 +229,66 @@ def _load_public_list_file(path: Path | str) -> dict[str, object]:
             raise ValueError(f"The public list file is missing the '{key}' list.")
         if not all(isinstance(entry, dict) for entry in entries):
             raise ValueError(f"Every entry in the '{key}' list must be a JSON object.")
-
     for entry in payload["nwas"]:
-        code = entry.get("code")
-        if not isinstance(code, str) or not code.strip():
-            raise ValueError("Every NWA in the public list file needs a non-empty 'code'.")
-        entry["code"] = code.strip()
-        entry["name"] = _text(entry, "name")
-        entry["notes"] = _text(entry, "notes")
-        tags = entry.setdefault("tags", [])
-        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
-            raise ValueError(f"NWA '{entry['code']}' has an invalid 'tags' list.")
-
+        _normalize_nwa_entry(entry)
     for entry in payload["work_items"]:
-        name = entry.get("name")
-        if not isinstance(name, str) or not name.strip():
-            raise ValueError("Every work item in the public list file needs a non-empty 'name'.")
-        entry["name"] = name.strip()
-        entry["description"] = _text(entry, "description")
-        splits = entry.get("splits")
-        if not isinstance(splits, list) or not splits:
-            raise ValueError(f"Work item '{entry['name']}' needs at least one NWA split.")
-        for split in splits:
-            if not isinstance(split, dict) or not isinstance(split.get("code"), str):
-                raise ValueError(f"Work item '{entry['name']}' has a split without a NWA 'code'.")
-            split["code"] = split["code"].strip()
-            percent = split.get("percent_basis_points")
-            if not isinstance(percent, int) or isinstance(percent, bool) or not 0 < percent <= 10000:
-                raise ValueError(
-                    f"Work item '{entry['name']}' has an invalid percent for NWA "
-                    f"'{split['code']}': use basis points (100% = 10000)."
-                )
-
+        _normalize_work_item_entry(entry)
     return payload
+
+
+def _read_json_object(path: Path | str) -> dict[str, object]:
+    """Read a file and parse it as a JSON object. Raises ValueError."""
+    try:
+        raw = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"Could not read the public list file: {exc}") from exc
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"The public list file is not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("The public list file must contain a JSON object.")
+    return payload
+
+
+def _normalize_nwa_entry(entry: dict) -> None:
+    """Validate one NWA entry and trim its text fields in place."""
+    code = entry.get("code")
+    if not isinstance(code, str) or not code.strip():
+        raise ValueError("Every NWA in the public list file needs a non-empty 'code'.")
+    entry["code"] = code.strip()
+    entry["name"] = _text(entry, "name")
+    entry["notes"] = _text(entry, "notes")
+    tags = entry.setdefault("tags", [])
+    if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+        raise ValueError(f"NWA '{entry['code']}' has an invalid 'tags' list.")
+
+
+def _normalize_work_item_entry(entry: dict) -> None:
+    """Validate one work item entry and its splits, trimming text fields in place."""
+    name = entry.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Every work item in the public list file needs a non-empty 'name'.")
+    entry["name"] = name.strip()
+    entry["description"] = _text(entry, "description")
+    splits = entry.get("splits")
+    if not isinstance(splits, list) or not splits:
+        raise ValueError(f"Work item '{entry['name']}' needs at least one NWA split.")
+    for split in splits:
+        _normalize_split(entry["name"], split)
+
+
+def _normalize_split(item_name: str, split: object) -> None:
+    """Validate one work item split (code and basis-point percent), trimming its code."""
+    if not isinstance(split, dict) or not isinstance(split.get("code"), str):
+        raise ValueError(f"Work item '{item_name}' has a split without a NWA 'code'.")
+    split["code"] = split["code"].strip()
+    percent = split.get("percent_basis_points")
+    if not isinstance(percent, int) or isinstance(percent, bool) or not 0 < percent <= 10000:
+        raise ValueError(
+            f"Work item '{item_name}' has an invalid percent for NWA "
+            f"'{split['code']}': use basis points (100% = 10000)."
+        )
 
 
 def _validate_file_contents(nwa_entries: list[dict], item_entries: list[dict]) -> None:
