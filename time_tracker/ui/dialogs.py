@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import sqlite3
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from time_tracker import constants
 from time_tracker.services import repository
-from time_tracker.services.validation import basis_points_to_percent, parse_percent_to_basis_points
+from time_tracker.services.validation import (
+    basis_points_to_percent,
+    parse_percent_to_basis_points,
+    validate_split_total,
+)
 from time_tracker.ui import theme
 from time_tracker.ui.widgets import scrolled_tree
 from time_tracker.util.time_utils import format_datetime, iso, parse_local_datetime
@@ -55,13 +60,27 @@ def work_item_choices(rows) -> list[tuple[str, str]]:
 
 
 class BaseDialog(tk.Toplevel):
-    """Base class for modal dialogs with common boilerplate."""
+    """Base class for modal dialogs with common boilerplate.
 
-    def __init__(self, parent: tk.Widget, title: str, resizable: bool = True):
+    on_save, when given, is called with the built result before the dialog
+    closes. If it raises ValueError the message is shown and the dialog stays
+    open, so the user can fix the problem without retyping everything.
+    """
+
+    error_title = "Error"
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        title: str,
+        resizable: bool = True,
+        on_save: Callable[[dict], None] | None = None,
+    ):
         super().__init__(parent)
         self.title(title)
         self.resizable(resizable, resizable)
         self.result = None
+        self.on_save = on_save
         self.transient(parent)
         self.grab_set()
 
@@ -78,10 +97,18 @@ class BaseDialog(tk.Toplevel):
         return buttons
 
     def _save(self) -> None:
-        # Only stash a result when validation passes; callers check self.result.
-        if self.validate():
-            self.result = self.build_result()
-            self.destroy()
+        # Only stash a result when validation and on_save pass; callers check self.result.
+        if not self.validate():
+            return
+        result = self.build_result()
+        if self.on_save is not None:
+            try:
+                self.on_save(result)
+            except ValueError as exc:
+                messagebox.showerror(self.error_title, str(exc), parent=self)
+                return
+        self.result = result
+        self.destroy()
 
     def validate(self) -> bool:
         raise NotImplementedError
@@ -93,8 +120,16 @@ class BaseDialog(tk.Toplevel):
 class NwaDialog(BaseDialog):
     """Modal form for creating or editing an NWA."""
 
-    def __init__(self, parent: tk.Widget, title: str, initial: sqlite3.Row | None = None):
-        super().__init__(parent, title, resizable=False)
+    error_title = constants.NWA
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        title: str,
+        initial: sqlite3.Row | None = None,
+        on_save: Callable[[dict], None] | None = None,
+    ):
+        super().__init__(parent, title, resizable=False, on_save=on_save)
 
         ttk.Label(self, text="Code").grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
         self.code = ttk.Entry(self, width=40)
@@ -141,8 +176,17 @@ class NwaDialog(BaseDialog):
 class WorkItemDialog(BaseDialog):
     """Modal form for a work item with its NWA percentage splits."""
 
-    def __init__(self, parent: tk.Widget, conn: sqlite3.Connection, title: str, initial: sqlite3.Row | None = None):
-        super().__init__(parent, title)
+    error_title = constants.WORK_ITEM
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        conn: sqlite3.Connection,
+        title: str,
+        initial: sqlite3.Row | None = None,
+        on_save: Callable[[dict], None] | None = None,
+    ):
+        super().__init__(parent, title, on_save=on_save)
         self.conn = conn
         self.geometry("680x520")
 
@@ -183,10 +227,13 @@ class WorkItemDialog(BaseDialog):
         self._nwa_id_map = dict(self.nwa_values)
         self.nwa_combo = ttk.Combobox(split_frame, values=[label for label, _ in self.nwa_values], state="readonly")
         self.nwa_combo.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        self.nwa_combo.bind("<<ComboboxSelected>>", self._on_nwa_selected)
         self.percent = ttk.Entry(split_frame, width=10)
         self.percent.grid(row=1, column=1, padx=4, pady=(0, 8))
         ttk.Button(split_frame, text="Add Split", command=self._add_split).grid(row=1, column=2, padx=4, pady=(0, 8))
         ttk.Button(split_frame, text="Remove", command=self._remove_split).grid(row=1, column=3, padx=8, pady=(0, 8))
+        self.total_label = ttk.Label(split_frame, text="")
+        self.total_label.grid(row=2, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 8))
 
         self._create_button_frame()
 
@@ -204,31 +251,77 @@ class WorkItemDialog(BaseDialog):
                     tags=("stale",) if stale else (),
                 )
                 self._split_ids[item] = split["nwa_id"]
+        self._update_total()
         self.wait_window()
+
+    def _split_total(self, excluding_nwa_id: str | None = None) -> int:
+        """Sum of the listed splits in basis points, optionally leaving one NWA out."""
+        total = 0
+        for item in self.splits.get_children():
+            if self._split_ids[item] != excluding_nwa_id:
+                total += parse_percent_to_basis_points(self.splits.item(item, "values")[1])
+        return total
+
+    def _update_total(self) -> None:
+        total = self._split_total()
+        text = f"Total: {basis_points_to_percent(total)}"
+        if total < 10000:
+            text += f" ({basis_points_to_percent(10000 - total)} left to allocate)"
+        self.total_label.configure(text=text)
+
+    def _on_nwa_selected(self, _event=None) -> None:
+        # Suggest whatever is left to reach 100%. Re-picking an NWA already in
+        # the list counts its own share as free, since adding replaces it.
+        nwa_id = self._nwa_id_map[self.nwa_combo.get()]
+        remaining = 10000 - self._split_total(excluding_nwa_id=nwa_id)
+        self.percent.delete(0, "end")
+        if remaining > 0:
+            self.percent.insert(0, basis_points_to_percent(remaining).rstrip("%"))
+        self.percent.focus_set()
+        self.percent.select_range(0, "end")
 
     def _add_split(self) -> None:
         if not self.nwa_combo.get():
             messagebox.showerror(constants.WORK_ITEM, f"Choose an {constants.NWA}.", parent=self)
+            return
+        nwa_id = self._nwa_id_map[self.nwa_combo.get()]
+        remaining = 10000 - self._split_total(excluding_nwa_id=nwa_id)
+        if remaining <= 0:
+            messagebox.showwarning(
+                constants.WORK_ITEM,
+                "The splits already total 100%. Lower or remove a split before adding another.",
+                parent=self,
+            )
             return
         try:
             basis_points = parse_percent_to_basis_points(self.percent.get())
         except ValueError as exc:
             messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
             return
-        nwa_id = self._nwa_id_map[self.nwa_combo.get()]
+        if basis_points > remaining:
+            messagebox.showwarning(
+                constants.WORK_ITEM,
+                f"That would bring the splits to {basis_points_to_percent(10000 - remaining + basis_points)}. "
+                f"Only {basis_points_to_percent(remaining)} is left to allocate.",
+                parent=self,
+            )
+            return
         values = (self._nwa_codes[nwa_id], basis_points_to_percent(basis_points))
         # An NWA can only appear once per work item: update the existing row instead.
         for item, existing_id in self._split_ids.items():
             if existing_id == nwa_id:
                 self.splits.item(item, values=values)
-                return
-        item = self.splits.insert("", "end", values=values)
-        self._split_ids[item] = nwa_id
+                break
+        else:
+            item = self.splits.insert("", "end", values=values)
+            self._split_ids[item] = nwa_id
+        self._update_total()
 
     def _remove_split(self) -> None:
         for item in self.splits.selection():
             self._split_ids.pop(item, None)
             self.splits.delete(item)
+        self._update_total()
 
     def validate(self) -> bool:
         name = self.name.get().strip()
@@ -243,8 +336,10 @@ class WorkItemDialog(BaseDialog):
         except ValueError as exc:
             messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
             return False
-        if not splits:
-            messagebox.showerror(constants.WORK_ITEM, f"At least one {constants.NWA} split is required.", parent=self)
+        try:
+            validate_split_total(splits)
+        except ValueError as exc:
+            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
             return False
         return True
 
@@ -263,8 +358,16 @@ class WorkItemDialog(BaseDialog):
 class SessionDialog(BaseDialog):
     """Modal form for editing a session's times, work item, and note."""
 
-    def __init__(self, parent: tk.Widget, conn: sqlite3.Connection, session: sqlite3.Row):
-        super().__init__(parent, "Edit Session", resizable=False)
+    error_title = constants.SESSION
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        conn: sqlite3.Connection,
+        session: sqlite3.Row,
+        on_save: Callable[[dict], None] | None = None,
+    ):
+        super().__init__(parent, "Edit Session", resizable=False, on_save=on_save)
         self.conn = conn
         self.session = session
 

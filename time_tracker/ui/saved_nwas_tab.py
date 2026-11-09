@@ -91,32 +91,30 @@ class SavedNwasTab(ttk.Frame):
         )
         return False
 
-    def add_nwa(self) -> None:
-        dialog = NwaDialog(self, f"Add {constants.NWA}")
-        if not dialog.result:
-            return
+    def _save_nwa(self, result: dict, nwa_id: str | None = None) -> None:
+        """Save from inside the dialog; a ValueError keeps it open with the user's input."""
         try:
-            repository.save_nwa(self.conn, **dialog.result)
+            repository.save_nwa(self.conn, nwa_id=nwa_id, **result)
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"That {constants.NWA} code already exists.") from exc
+
+    def add_nwa(self) -> None:
+        dialog = NwaDialog(self, f"Add {constants.NWA}", on_save=self._save_nwa)
+        if dialog.result:
             self.on_change()
-        except sqlite3.IntegrityError:
-            messagebox.showerror(constants.NWA, f"That {constants.NWA} code already exists.", parent=self)
-        except ValueError as exc:
-            messagebox.showerror(constants.NWA, str(exc), parent=self)
 
     def edit_nwa(self) -> None:
         row_id = self.selected_id()
         if not row_id or not self._can_modify(self._rows[row_id]):
             return
-        dialog = NwaDialog(self, f"Edit {constants.NWA}", self._rows[row_id])
-        if not dialog.result:
-            return
-        try:
-            repository.save_nwa(self.conn, nwa_id=row_id, **dialog.result)
+        dialog = NwaDialog(
+            self,
+            f"Edit {constants.NWA}",
+            self._rows[row_id],
+            on_save=lambda result: self._save_nwa(result, nwa_id=row_id),
+        )
+        if dialog.result:
             self.on_change()
-        except sqlite3.IntegrityError:
-            messagebox.showerror(constants.NWA, f"That {constants.NWA} code already exists.", parent=self)
-        except ValueError as exc:
-            messagebox.showerror(constants.NWA, str(exc), parent=self)
 
     def remove_nwa(self) -> None:
         row_id = self.selected_id()
