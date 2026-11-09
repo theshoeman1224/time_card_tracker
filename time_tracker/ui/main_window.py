@@ -32,6 +32,7 @@ class MainWindow(ttk.Frame):
         self.notebook.add(self.work_items, text=f"{constants.WORK_ITEM}s / Current Work")
         self.notebook.add(self.reports, text="Reports")
         self.notebook.add(self.settings, text="Settings / Public List")
+        self.notebook.select(self.work_items)
 
     def refresh_all(self) -> None:
         """Reload data in every tab after a change."""

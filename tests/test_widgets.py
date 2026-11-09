@@ -95,6 +95,10 @@ class FitColumnsTests(TkTestCase):
         self.assertLess(tree.winfo_width(), 600)
         self.assert_columns_fit(tree)
 
+    def test_work_items_tab_is_selected_at_startup(self):
+        window = MainWindow(self.root, self.conn)
+        self.assertEqual(window.notebook.select(), str(window.work_items))
+
     def test_work_items_scope_column_is_not_under_the_scrollbar_at_startup(self):
         self.root.geometry("1100x720")
         window = MainWindow(self.root, self.conn)
