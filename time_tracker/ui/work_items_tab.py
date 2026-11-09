@@ -215,27 +215,29 @@ class WorkItemsTab(ttk.Frame):
         if not repository.list_nwas(self.conn):
             messagebox.showerror(constants.WORK_ITEM, f"Create at least one {constants.NWA} before adding work items.", parent=self)
             return
-        dialog = WorkItemDialog(self, self.conn, f"Add {constants.WORK_ITEM}")
-        if not dialog.result:
-            return
-        try:
-            repository.save_work_item(self.conn, **dialog.result)
+        # The dialog saves before closing, so a rejected save keeps the user's input.
+        dialog = WorkItemDialog(
+            self,
+            self.conn,
+            f"Add {constants.WORK_ITEM}",
+            on_save=lambda result: repository.save_work_item(self.conn, **result),
+        )
+        if dialog.result:
             self.on_change()
-        except ValueError as exc:
-            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
 
     def edit_work_item(self) -> None:
         row_id = self.selected_work_item_id()
         if not row_id:
             return
-        dialog = WorkItemDialog(self, self.conn, f"Edit {constants.WORK_ITEM}", self._work_rows[row_id])
-        if not dialog.result:
-            return
-        try:
-            repository.save_work_item(self.conn, work_item_id=row_id, **dialog.result)
+        dialog = WorkItemDialog(
+            self,
+            self.conn,
+            f"Edit {constants.WORK_ITEM}",
+            self._work_rows[row_id],
+            on_save=lambda result: repository.save_work_item(self.conn, work_item_id=row_id, **result),
+        )
+        if dialog.result:
             self.on_change()
-        except ValueError as exc:
-            messagebox.showerror(constants.WORK_ITEM, str(exc), parent=self)
 
     def remove_work_item(self) -> None:
         row_id = self.selected_work_item_id()
@@ -274,11 +276,11 @@ class WorkItemsTab(ttk.Frame):
         row_id = self.selected_session_id()
         if not row_id:
             return
-        dialog = SessionDialog(self, self.conn, self._session_rows[row_id])
-        if not dialog.result:
-            return
-        try:
-            tracking.update_session(self.conn, row_id, **dialog.result)
+        dialog = SessionDialog(
+            self,
+            self.conn,
+            self._session_rows[row_id],
+            on_save=lambda result: tracking.update_session(self.conn, row_id, **result),
+        )
+        if dialog.result:
             self.on_change()
-        except ValueError as exc:
-            messagebox.showerror(constants.SESSION, str(exc), parent=self)
